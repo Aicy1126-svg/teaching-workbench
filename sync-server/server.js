@@ -1,0 +1,256 @@
+/**
+ * 教培备考工作台 - 一体化服务器
+ * 纯 Node.js 实现（无需 npm install）
+ * 同时托管：网页静态资源 + 账号同步 API（同源，免填地址）
+ * 启动：node server.js   (默认端口 8080)
+ */
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+
+const PORT = process.env.PORT || 8080;
+// 计算局域网 IP（供手机/平板通过同一 WiFi 连接本机服务器）
+const LAN_IPS = (() => {
+  const list = [];
+  const ifaces = os.networkInterfaces();
+  for (const k in ifaces) for (const a of ifaces[k]) {
+    if (a.family === 'IPv4' && !a.internal) list.push(a.address);
+  }
+  return list;
+})();
+// 静态根目录：
+// 1. 若 sync-server/public/ 存在（部署到云平台时，把前端资源打包在这里），优先用它
+// 2. 否则兼容本地开发： teaching-workbench/ 根目录
+let ROOT = path.join(__dirname, 'public');
+if (!fs.existsSync(path.join(ROOT, 'index.html'))) {
+  ROOT = path.join(__dirname, '..');
+}
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SALT = 'teaching_workbench_sync_2026';
+
+// ---------- 用户数据 ----------
+let users = {};
+if (fs.existsSync(USERS_FILE)) {
+  try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch (e) { users = {}; }
+}
+function saveUsers() {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+// ===== Token：HMAC 签名，无状态，部署重启不丢失 =====
+const TOKEN_SECRET = 'teaching_workbench_sync_hmac_secret_2026';
+const TOKEN_TTL = 365 * 24 * 3600 * 1000; // 365 天，几乎不掉线
+
+function createToken(username) {
+  const payload = {
+    u: username,
+    e: Date.now() + TOKEN_TTL, // 过期时间戳（毫秒）
+  };
+  const payloadStr = JSON.stringify(payload);
+  const payloadB64 = Buffer.from(payloadStr).toString('base64url');
+  const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(payloadB64).digest('base64url');
+  return payloadB64 + '.' + sig;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const dot = token.lastIndexOf('.');
+  if (dot <= 0) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  // 校验签名
+  const expected = crypto.createHmac('sha256', TOKEN_SECRET).update(payloadB64).digest('base64url');
+  if (sig !== expected) return null;
+  // 解码并检查过期
+  let payload;
+  try { payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')); }
+  catch (e) { return null; }
+  if (!payload.u || !payload.e) return null;
+  if (Date.now() > payload.e) return null; // 已过期
+  return payload.u;
+}
+function hashPwd(pwd) { return crypto.createHash('sha256').update(pwd + SALT).digest('hex'); }
+function userDataFile(username) {
+  const safe = Buffer.from(username).toString('hex');
+  return path.join(DATA_DIR, `data_${safe}.json`);
+}
+function userDocsFile(username) {
+  const safe = Buffer.from(username).toString('hex');
+  return path.join(DATA_DIR, `data_docs_${safe}.json`);
+}
+function readUserData(username) {
+  const f = userDataFile(username);
+  if (fs.existsSync(f)) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
+  return null;
+}
+function writeUserData(username, payload) {
+  fs.writeFileSync(userDataFile(username), JSON.stringify(payload, null, 2));
+}
+
+// ---------- 静态文件 MIME ----------
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+  '.pdf': 'application/pdf',
+  '.woff': 'font/woff', '.woff2': 'font/woff2',
+};
+
+function sendJSON(res, status, obj) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  });
+  res.end(JSON.stringify(obj));
+}
+function sendFile(res, filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const type = MIME[ext] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': type });
+  fs.createReadStream(filePath).pipe(res);
+}
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => { data += chunk; if (data.length > 50 * 1024 * 1024) req.destroy(); });
+    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(new Error('JSON 解析失败')); } });
+    req.on('error', reject);
+  });
+}
+function authUser(req) {
+  const auth = req.headers['authorization'] || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  return verifyToken(token);
+}
+
+// ---------- 路由 ----------
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const p = url.pathname;
+
+  try {
+    // ===== 同步 API =====
+    if (p === '/api/health' && req.method === 'GET') {
+      return sendJSON(res, 200, { ok: true, time: Date.now() });
+    }
+    // 返回本机局域网地址，方便手机/平板通过同一 WiFi 连接本机服务器同步
+    if (p === '/api/network' && req.method === 'GET') {
+      return sendJSON(res, 200, { lan: LAN_IPS, port: PORT, origin: `http://${req.headers.host}` });
+    }
+    if (p === '/api/register' && req.method === 'POST') {
+      const { username, password } = await readBody(req);
+      if (!username) return sendJSON(res, 400, { error: '用户名不能为空' });
+      if (username.length < 2) return sendJSON(res, 400, { error: '用户名至少2个字符' });
+      if (users[username]) return sendJSON(res, 409, { error: '该用户名已被注册，请直接登录' });
+      users[username] = { pwdHash: hashPwd(password || ''), createdAt: Date.now() };
+      saveUsers();
+      const token = createToken(username);
+      return sendJSON(res, 200, { token, username });
+    }
+    if (p === '/api/login' && req.method === 'POST') {
+      const { username, password } = await readBody(req);
+      if (!username) return sendJSON(res, 400, { error: '用户名不能为空' });
+      const u = users[username];
+      if (!u || u.pwdHash !== hashPwd(password || '')) return sendJSON(res, 401, { error: '用户名或密码错误' });
+      const token = createToken(username);
+      return sendJSON(res, 200, { token, username });
+    }
+    const username = authUser(req);
+    if (p.startsWith('/api/')) {
+      if (!username) return sendJSON(res, 401, { error: '未登录或登录已过期' });
+      if (p === '/api/pull' && req.method === 'GET') {
+        return sendJSON(res, 200, readUserData(username) || { data: null, updatedAt: 0 });
+      }
+      if (p === '/api/push' && req.method === 'POST') {
+        const body = await readBody(req);
+        const serverTime = Date.now();
+        writeUserData(username, { data: body.data || null, updatedAt: serverTime });
+        return sendJSON(res, 200, { ok: true, updatedAt: serverTime });
+      }
+      if (p === '/api/logout' && req.method === 'POST') {
+        // Token 无状态，客户端自己清除即可；服务器端无需操作
+        return sendJSON(res, 200, { ok: true });
+      }
+      // 备课文档库同步（PDF/Word 二进制 + 手写图），与文本数据分开存储
+      if (p === '/api/docs/pull' && req.method === 'GET') {
+        const f = userDocsFile(username);
+        if (fs.existsSync(f)) { try { return sendJSON(res, 200, JSON.parse(fs.readFileSync(f, 'utf8'))); } catch (e) {} }
+        return sendJSON(res, 200, { docs: null, updatedAt: 0 });
+      }
+      if (p === '/api/docs/push' && req.method === 'POST') {
+        const body = await readBody(req);
+        const f = userDocsFile(username);
+        fs.writeFileSync(f, JSON.stringify({ docs: body.docs || null, updatedAt: body.updatedAt || Date.now() }));
+        return sendJSON(res, 200, { ok: true, updatedAt: body.updatedAt || Date.now() });
+      }
+      return sendJSON(res, 404, { error: '接口不存在' });
+    }
+
+    // ===== 静态文件 =====
+    let rel = decodeURIComponent(p);
+    if (rel === '/' || rel === '') rel = '/index.html';
+    const filePath = path.normalize(path.join(ROOT, rel));
+    if (!filePath.startsWith(ROOT)) { res.writeHead(403); return res.end('Forbidden'); }
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      return sendFile(res, filePath);
+    }
+    // SPA 回退
+    if (!path.extname(rel)) {
+      const idx = path.join(ROOT, 'index.html');
+      if (fs.existsSync(idx)) return sendFile(res, idx);
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found');
+  } catch (err) {
+    console.error('[ERR]', err.message);
+    if (!res.headersSent) sendJSON(res, 500, { error: '服务器错误: ' + err.message });
+  }
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  const ifaces = os.networkInterfaces();
+  const lan = [];
+  for (const k in ifaces) for (const a of ifaces[k]) {
+    if (a.family === 'IPv4' && !a.internal) lan.push(a.address);
+  }
+  console.log('========================================');
+  console.log(' 教培工作台 已启动（网页 + 云同步 一体化）');
+  console.log(` 本机访问:  http://localhost:${PORT}`);
+  if (lan.length) console.log(` 手机/平板: http://${lan[0]}:${PORT}`);
+  console.log('========================================');
+  console.log(' 登录只需用户名+密码，同账号自动跨设备同步');
+  console.log(' 按 Ctrl+C 停止');
+  console.log('========================================');
+});
+
+// ---------- 崩溃保护：异常不导致进程退出（保持服务可用）----------
+process.on('uncaughtException', (err) => {
+  console.error('[守护] 捕获未处理异常，服务继续运行:', err && err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[守护] 捕获未处理 Promise 拒绝，服务继续运行:', reason);
+});

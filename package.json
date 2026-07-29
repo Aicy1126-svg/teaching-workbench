@@ -1,0 +1,14 @@
+{
+  "name": "teaching-workbench",
+  "version": "1.0.0",
+  "description": "教培备考工作台 - 纯前端 + Node.js 一体化同步服务器",
+  "main": "sync-server/server.js",
+  "scripts": {
+    "start": "node sync-server/server.js",
+    "server": "node sync-server/server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "private": true
+}

@@ -1,0 +1,12 @@
+{
+  "name": "teaching-workbench-sync-server",
+  "version": "1.0.0",
+  "description": "教培备考工作台云同步服务器 - 账号登录 + 跨设备数据同步",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

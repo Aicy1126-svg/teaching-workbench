@@ -1,0 +1,23 @@
+# 依赖
+node_modules/
+
+# 同步服务器用户数据（含隐私，不提交）
+sync-server/data/
+
+# 项目记忆与缓存
+.workbuddy/
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# 临时部署打包目录（中文目录名）
+部署包-*/
+
+# Python 脚本临时产物
+__pycache__/
+*.pyc
