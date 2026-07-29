@@ -4,6 +4,10 @@ node_modules/
 # 同步服务器用户数据（含隐私，不提交）
 sync-server/data/
 
+# sync-server 运行时产物（含 Windows 保留设备名 nul，无法被 git 索引，且非运行必需）
+sync-server/nul
+sync-server/*.txt
+
 # 项目记忆与缓存
 .workbuddy/
 
