@@ -203,6 +203,7 @@ function showSyncMenu() {
     </details>
     <div class="flex gap-2 flex-col mt-3">
       <button class="btn btn-primary w-full" onclick="quickSync();Modal.close(document.querySelector('.modal-overlay'))">🔄 立即同步</button>
+      <button class="btn btn-secondary w-full" onclick="resetServerToCurrentOrigin()">🔗 重置为当前打开的网址（统一多端同步）</button>
       <button class="btn btn-secondary w-full" onclick="Modal.close(document.querySelector('.modal-overlay'));setTimeout(showInstallGuide,250)">📱 安装到手机/平板</button>
       <button class="btn btn-danger w-full" onclick="logoutAccount();Modal.close(document.querySelector('.modal-overlay'))">🚪 退出登录</button>
     </div>
@@ -224,6 +225,30 @@ async function resolvePhoneUrl() {
     } catch (e) {}
   }
   return location.origin;
+}
+
+// 重置同步服务器为"当前打开的网址"的统一地址：
+// 本地服务器时统一用局域网 IP（消除 localhost vs 192.168 不一致），Railway 时用自身域名。
+// 手机和电脑都点一次，即可指向同一台服务器，解决多端不同步。
+async function resetServerToCurrentOrigin() {
+  if (!Sync.isLoggedIn()) { Toast.show('请先登录后再重置', 'error'); return; }
+  let target = location.origin;
+  const host = location.hostname;
+  const isPrivate = host === 'localhost' || host === '127.0.0.1' || /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  if (isPrivate) {
+    try {
+      const r = await fetch('/api/network');
+      const j = await r.json();
+      if (j && j.lan && j.lan.length) target = `http://${j.lan[0]}:${j.port}`;
+    } catch (e) {}
+  }
+  Sync.setServerUrl(target);
+  Toast.show('已把同步服务器重置为：' + target, 'ok');
+  try { Modal.close(document.querySelector('.modal-overlay')); } catch (e) {}
+  Sync.syncNow({ reload: false }).then(res => {
+    if (res.ok) Toast.show('✅ 已指向当前网址，正在同步', 'ok');
+    else Toast.show('⚠️ 同步失败：' + (res.error || ''), 'error');
+  });
 }
 
 function showInstallGuide() {
