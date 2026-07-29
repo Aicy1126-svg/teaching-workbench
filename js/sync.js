@@ -167,12 +167,36 @@ const Sync = {
     console.log('[Sync] 应用远程数据，共 ' + keys.length + ' 个键:', keys.join(', '));
     keys.forEach(key => {
       const fullKey = STORAGE_PREFIX + key;
+      const remoteVal = remoteData[key];
+      // 防丢失保护：远端是「空数据」而本地有数据时不覆盖本地，避免空服务器把本地真实数据清空
       try {
-        localStorage.setItem(fullKey, typeof remoteData[key] === 'string'
-          ? remoteData[key]
-          : JSON.stringify(remoteData[key]));
+        const localRaw = localStorage.getItem(fullKey);
+        if (localRaw != null && Sync._isEmptyData(remoteVal) && !Sync._isEmptyData(localRaw)) {
+          console.warn('[Sync] 跳过空覆盖：' + key + '（保留本地数据）');
+          return;
+        }
+      } catch (e) {}
+      try {
+        localStorage.setItem(fullKey, typeof remoteVal === 'string'
+          ? remoteVal
+          : JSON.stringify(remoteVal));
       } catch (e) { console.warn('同步写入失败:', key, e); }
     });
+  },
+
+  // 判断数据是否为「空」（空数组、空对象、仅含空 list 的对象、空字符串）
+  _isEmptyData(v) {
+    if (v == null) return true;
+    if (typeof v === 'string') return v.trim() === '' || v === '[]' || v === '{}';
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') {
+      const keys = Object.keys(v);
+      if (keys.length === 0) return true;
+      // 形如 { list: [] } 的容器
+      if (v.list && Array.isArray(v.list) && v.list.length === 0) return true;
+      return false;
+    }
+    return false;
   },
 
   async pull() {
