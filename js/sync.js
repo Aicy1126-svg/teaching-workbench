@@ -201,8 +201,16 @@ const Sync = {
 
   async pull() {
     const result = await this._request('/api/pull', 'GET');
-    if (result.updatedAt && result.updatedAt > this.lastSyncAt) {
-      this.applyRemoteData(result.data);
+    const remote = result.data || {};
+    const local = this.collectLocalData();
+    const localMissing = (k) => !local[k] || this._isEmptyData(local[k]);
+    const remoteHas = (k) => remote[k] && !this._isEmptyData(remote[k]);
+    // 关键修复：云端更新，或本地缺失关键数据(schedule/students)而云端有时，
+    // 强制应用。避免「本地空 + updatedAt 不再增长」导致排课表永远拉不回来。
+    const needForce = (localMissing('schedule') && remoteHas('schedule')) ||
+                      (localMissing('students') && remoteHas('students'));
+    if (result.updatedAt && (result.updatedAt > this.lastSyncAt || needForce)) {
+      this.applyRemoteData(remote);
       this.lastSyncAt = result.updatedAt;
       localStorage.setItem('sync_last_at', String(result.updatedAt));
       return true;
