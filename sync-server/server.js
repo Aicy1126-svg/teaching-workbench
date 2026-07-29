@@ -40,8 +40,20 @@ let users = {};
 if (fs.existsSync(USERS_FILE)) {
   try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch (e) { users = {}; }
 }
-function saveUsers() {
+async function saveUsers() {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  if (mongo) {
+    try {
+      for (const username of Object.keys(users)) {
+        const u = users[username];
+        await mongo.col.updateOne(
+          { username },
+          { $set: { username, pwdHash: u.pwdHash, createdAt: u.createdAt } },
+          { upsert: true }
+        );
+      }
+    } catch (e) { console.error('[mongo accounts]', e.message); }
+  }
 }
 // ===== Token：HMAC 签名，无状态，部署重启不丢失 =====
 const TOKEN_SECRET = 'teaching_workbench_sync_hmac_secret_2026';
@@ -84,13 +96,84 @@ function userDocsFile(username) {
   const safe = Buffer.from(username).toString('hex');
   return path.join(DATA_DIR, `data_docs_${safe}.json`);
 }
-function readUserData(username) {
+
+// ---------- 云存储（MongoDB，可选）----------
+// 设置了环境变量 MONGO_URI 则数据存云端，Railway 重启/重新部署都不丢；否则用本地文件兜底
+let mongo = null; // { client, col }
+
+async function readUserData(username) {
+  if (mongo) {
+    try {
+      const d = await mongo.col.findOne({ username });
+      if (d) return { data: d.data != null ? d.data : null, updatedAt: d.updatedAt || 0 };
+    } catch (e) { console.error('[mongo read]', e.message); }
+  }
   const f = userDataFile(username);
   if (fs.existsSync(f)) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
   return null;
 }
-function writeUserData(username, payload) {
+async function writeUserData(username, payload) {
+  if (mongo) {
+    try {
+      await mongo.col.updateOne(
+        { username },
+        { $set: { username, data: payload.data, updatedAt: payload.updatedAt } },
+        { upsert: true }
+      );
+      return;
+    } catch (e) { console.error('[mongo write]', e.message); }
+  }
   fs.writeFileSync(userDataFile(username), JSON.stringify(payload, null, 2));
+}
+async function readUserDocs(username) {
+  if (mongo) {
+    try {
+      const d = await mongo.col.findOne({ username });
+      if (d && d.docs !== undefined) return { docs: d.docs, updatedAt: d.docsUpdatedAt || 0 };
+    } catch (e) { console.error('[mongo docs read]', e.message); }
+  }
+  const f = userDocsFile(username);
+  if (fs.existsSync(f)) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return { docs: null, updatedAt: 0 }; } }
+  return { docs: null, updatedAt: 0 };
+}
+async function writeUserDocs(username, payload) {
+  if (mongo) {
+    try {
+      await mongo.col.updateOne(
+        { username },
+        { $set: { username, docs: payload.docs, docsUpdatedAt: payload.updatedAt } },
+        { upsert: true }
+      );
+      return;
+    } catch (e) { console.error('[mongo docs write]', e.message); }
+  }
+  fs.writeFileSync(userDocsFile(username), JSON.stringify(payload, null, 2));
+}
+
+// 启动时从 MongoDB 加载账号
+async function loadAccountsFromMongo() {
+  const docs = await mongo.col.find({}).toArray();
+  const map = {};
+  for (const d of docs) map[d.username] = { pwdHash: d.pwdHash, createdAt: d.createdAt };
+  return map;
+}
+async function initStorage() {
+  if (!process.env.MONGO_URI) {
+    console.log('[storage] 未设置 MONGO_URI，使用本地文件存储');
+    return;
+  }
+  try {
+    const { MongoClient } = await import('mongodb');
+    const client = new MongoClient(process.env.MONGO_URI, { serverSelectionTimeoutMS: 8000 });
+    await client.connect();
+    const db = client.db('teaching_workbench');
+    mongo = { client, col: db.collection('users') };
+    users = await loadAccountsFromMongo();
+    console.log('[storage] MongoDB 已连接，已加载', Object.keys(users).length, '个账号');
+  } catch (e) {
+    console.error('[storage] MongoDB 连接失败，回退本地文件:', e.message);
+    mongo = null;
+  }
 }
 
 // ---------- 数据合并保护 ----------
@@ -197,7 +280,7 @@ const server = http.createServer(async (req, res) => {
       if (username.length < 2) return sendJSON(res, 400, { error: '用户名至少2个字符' });
       if (users[username]) return sendJSON(res, 409, { error: '该用户名已被注册，请直接登录' });
       users[username] = { pwdHash: hashPwd(password || ''), createdAt: Date.now() };
-      saveUsers();
+      await saveUsers();
       const token = createToken(username);
       return sendJSON(res, 200, { token, username });
     }
@@ -213,15 +296,15 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) {
       if (!username) return sendJSON(res, 401, { error: '未登录或登录已过期' });
       if (p === '/api/pull' && req.method === 'GET') {
-        return sendJSON(res, 200, readUserData(username) || { data: null, updatedAt: 0 });
+        return sendJSON(res, 200, (await readUserData(username)) || { data: null, updatedAt: 0 });
       }
       if (p === '/api/push' && req.method === 'POST') {
         const body = await readBody(req);
         // 合并保护：本地空字段不覆盖服务器真实数据，杜绝多端空推送清库
-        const existing = readUserData(username);
+        const existing = await readUserData(username);
         const merged = mergeData(body.data || {}, existing ? existing.data : null);
         const serverTime = Date.now();
-        writeUserData(username, { data: merged, updatedAt: serverTime });
+        await writeUserData(username, { data: merged, updatedAt: serverTime });
         return sendJSON(res, 200, { ok: true, updatedAt: serverTime });
       }
       if (p === '/api/logout' && req.method === 'POST') {
@@ -230,14 +313,11 @@ const server = http.createServer(async (req, res) => {
       }
       // 备课文档库同步（PDF/Word 二进制 + 手写图），与文本数据分开存储
       if (p === '/api/docs/pull' && req.method === 'GET') {
-        const f = userDocsFile(username);
-        if (fs.existsSync(f)) { try { return sendJSON(res, 200, JSON.parse(fs.readFileSync(f, 'utf8'))); } catch (e) {} }
-        return sendJSON(res, 200, { docs: null, updatedAt: 0 });
+        return sendJSON(res, 200, await readUserDocs(username));
       }
       if (p === '/api/docs/push' && req.method === 'POST') {
         const body = await readBody(req);
-        const f = userDocsFile(username);
-        fs.writeFileSync(f, JSON.stringify({ docs: body.docs || null, updatedAt: body.updatedAt || Date.now() }));
+        await writeUserDocs(username, { docs: body.docs || null, updatedAt: body.updatedAt || Date.now() });
         return sendJSON(res, 200, { ok: true, updatedAt: body.updatedAt || Date.now() });
       }
       return sendJSON(res, 404, { error: '接口不存在' });
@@ -264,21 +344,24 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  const ifaces = os.networkInterfaces();
-  const lan = [];
-  for (const k in ifaces) for (const a of ifaces[k]) {
-    if (a.family === 'IPv4' && !a.internal) lan.push(a.address);
-  }
-  console.log('========================================');
-  console.log(' 教培工作台 已启动（网页 + 云同步 一体化）');
-  console.log(` 本机访问:  http://localhost:${PORT}`);
-  if (lan.length) console.log(` 手机/平板: http://${lan[0]}:${PORT}`);
-  console.log('========================================');
-  console.log(' 登录只需用户名+密码，同账号自动跨设备同步');
-  console.log(' 按 Ctrl+C 停止');
-  console.log('========================================');
-});
+(async function start() {
+  await initStorage();
+  server.listen(PORT, '0.0.0.0', () => {
+    const ifaces = os.networkInterfaces();
+    const lan = [];
+    for (const k in ifaces) for (const a of ifaces[k]) {
+      if (a.family === 'IPv4' && !a.internal) lan.push(a.address);
+    }
+    console.log('========================================');
+    console.log(' 教培工作台 已启动（网页 + 云同步 一体化）');
+    console.log(` 本机访问:  http://localhost:${PORT}`);
+    if (lan.length) console.log(` 手机/平板: http://${lan[0]}:${PORT}`);
+    console.log('========================================');
+    console.log(' 登录只需用户名+密码，同账号自动跨设备同步');
+    console.log(' 按 Ctrl+C 停止');
+    console.log('========================================');
+  });
+})();
 
 // ---------- 崩溃保护：异常不导致进程退出（保持服务可用）----------
 process.on('uncaughtException', (err) => {
