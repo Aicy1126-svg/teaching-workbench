@@ -92,6 +92,35 @@ function writeUserData(username, payload) {
   fs.writeFileSync(userDataFile(username), JSON.stringify(payload, null, 2));
 }
 
+// ---------- 数据合并保护 ----------
+// 判断数据是否为「空」（空数组、空对象、仅含空 list 的对象、空字符串）
+function isEmptyData(v) {
+  if (v == null) return true;
+  if (typeof v === 'string') return v.trim() === '' || v === '[]' || v === '{}';
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') {
+    const keys = Object.keys(v);
+    if (keys.length === 0) return true;
+    if (v.list && Array.isArray(v.list) && v.list.length === 0) return true;
+    return false;
+  }
+  return false;
+}
+// 合并：本地优先（本地非空覆盖服务器），本地为空时保留服务器数据，防止空推送清库
+function mergeData(local, server) {
+  const out = { ...server };
+  for (const k of Object.keys(local || {})) {
+    const lv = local[k];
+    const sv = server ? server[k] : undefined;
+    if (isEmptyData(lv)) {
+      if (!isEmptyData(sv)) out[k] = sv; // 本地空、服务器有 → 保留服务器
+    } else {
+      out[k] = lv; // 本地有数据 → 本地优先
+    }
+  }
+  return out;
+}
+
 // ---------- 静态文件 MIME ----------
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -187,8 +216,11 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/push' && req.method === 'POST') {
         const body = await readBody(req);
+        // 合并保护：本地空字段不覆盖服务器真实数据，杜绝多端空推送清库
+        const existing = readUserData(username);
+        const merged = mergeData(body.data || {}, existing ? existing.data : null);
         const serverTime = Date.now();
-        writeUserData(username, { data: body.data || null, updatedAt: serverTime });
+        writeUserData(username, { data: merged, updatedAt: serverTime });
         return sendJSON(res, 200, { ok: true, updatedAt: serverTime });
       }
       if (p === '/api/logout' && req.method === 'POST') {

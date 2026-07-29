@@ -212,12 +212,45 @@ const Sync = {
 
   async push() {
     const localData = this.collectLocalData();
-    const result = await this._request('/api/push', 'POST', { data: localData });
+    // 合并保护：先拉服务器数据，本地为空字段用服务器补全，避免本地空数据覆盖服务器真实数据
+    let merged = localData;
+    try {
+      const remote = await this._request('/api/pull', 'GET');
+      merged = this._mergeData(localData, remote.data || {});
+    } catch (e) { /* 拉取失败则直接推本地，交由服务端合并兜底 */ }
+    const result = await this._request('/api/push', 'POST', { data: merged });
     // 使用服务器时间戳，保证多设备时钟一致
     if (result.updatedAt) {
       this.lastSyncAt = result.updatedAt;
       localStorage.setItem('sync_last_at', String(result.updatedAt));
     }
+  },
+
+  // 合并：本地优先（本地非空覆盖服务器），本地为空时保留服务器数据
+  _mergeData(local, server) {
+    const out = { ...server };
+    for (const k of Object.keys(local || {})) {
+      const lv = local[k];
+      const sv = server ? server[k] : undefined;
+      if (this._isEmptyData(lv)) {
+        if (!this._isEmptyData(sv)) out[k] = sv;
+      } else {
+        out[k] = lv;
+      }
+    }
+    return out;
+  },
+
+  // 强制从云端恢复：无视本地、直接用服务器数据覆盖本地（找回丢失数据用）
+  async forceRestore() {
+    const result = await this._request('/api/pull', 'GET');
+    this.applyRemoteData(result.data);
+    this.lastSyncAt = result.updatedAt || Date.now();
+    localStorage.setItem('sync_last_at', String(this.lastSyncAt));
+    this._lastResult = { ok: true, time: Date.now(), error: '', pulled: true };
+    this._updateStatus('ok');
+    setTimeout(() => location.reload(), 500);
+    return true;
   },
 
   async syncNow(opts = {}) {

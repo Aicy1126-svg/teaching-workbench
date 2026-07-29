@@ -332,6 +332,8 @@ ul, ol { list-style: none; }
 .btn-secondary:hover { background: var(--bg-hover); }
 .btn-danger { background: var(--color-danger); color: #fff; }
 .btn-danger:hover { opacity: 0.9; }
+.btn-warning { background: #D4A957; color: #fff; }
+.btn-warning:hover { opacity: 0.9; }
 .btn-warm { background: var(--color-warm); color: #fff; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-lg { padding: 12px 24px; font-size: 15px; }

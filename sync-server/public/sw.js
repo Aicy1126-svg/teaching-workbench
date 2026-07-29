@@ -4,7 +4,7 @@
  * - Network-first strategy for data? No data cached here (localStorage stays local)
  * - Cache-first for static assets
  */
-const CACHE_NAME = 'teaching-workbench-v15';
+const CACHE_NAME = 'teaching-workbench-v16';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

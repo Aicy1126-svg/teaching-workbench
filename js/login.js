@@ -203,6 +203,7 @@ function showSyncMenu() {
     </details>
     <div class="flex gap-2 flex-col mt-3">
       <button class="btn btn-primary w-full" onclick="quickSync();Modal.close(document.querySelector('.modal-overlay'))">🔄 立即同步</button>
+      <button class="btn btn-warning w-full" onclick="forceRestoreFromCloud()">⬇️ 强制从云端恢复数据（找回丢失数据）</button>
       <button class="btn btn-secondary w-full" onclick="resetServerToCurrentOrigin()">🔗 重置为当前打开的网址（统一多端同步）</button>
       <button class="btn btn-secondary w-full" onclick="Modal.close(document.querySelector('.modal-overlay'));setTimeout(showInstallGuide,250)">📱 安装到手机/平板</button>
       <button class="btn btn-danger w-full" onclick="logoutAccount();Modal.close(document.querySelector('.modal-overlay'))">🚪 退出登录</button>
@@ -294,6 +295,20 @@ async function quickSync() {
   } else {
     Toast.show('❌ 同步失败: ' + (r.error || '未知错误'), 'error');
     // 同步失败后打开诊断面板
+    setTimeout(() => showSyncMenu(), 800);
+  }
+}
+
+// 强制从云端恢复数据：无视本地、直接用服务器数据覆盖本地，找回被覆盖/丢失的数据
+async function forceRestoreFromCloud() {
+  if (!Sync.isLoggedIn()) { Toast.show('请先登录', 'error'); return; }
+  if (!confirm('将从云端下载数据并覆盖本机当前显示的内容。\n\n此操作会用服务器上的数据（含排课表、学生、成绩等）替换本机所见。\n确定继续？')) return;
+  Toast.show('正在从云端恢复数据...');
+  try {
+    await Sync.forceRestore();
+    Toast.show('✅ 已从云端恢复数据，页面即将刷新');
+  } catch (e) {
+    Toast.show('❌ 恢复失败: ' + (e.message || '未知错误'), 'error');
     setTimeout(() => showSyncMenu(), 800);
   }
 }
