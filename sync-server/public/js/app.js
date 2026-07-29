@@ -330,6 +330,26 @@ function switchModule(name) {
     container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🚧</div><div class="empty-state-text">模块开发中...</div></div>`;
   }
   main.scrollTop = 0;
+
+  // 排课表横屏时，在 body 层级追加一个不受旋转容器影响的退出按钮（兜底）
+  updateBodyLandscapeExitButton();
+}
+
+function updateBodyLandscapeExitButton() {
+  let btn = document.getElementById('schBodyExitLandscape');
+  const need = App.currentModule === 'schedule' && App.scheduleLandscape;
+  if (!need) {
+    if (btn) btn.remove();
+    return;
+  }
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'schBodyExitLandscape';
+    btn.className = 'sch-exit-landscape';
+    btn.textContent = '✕ 退出横屏';
+    btn.onclick = () => { App.scheduleLandscape = false; switchModule('schedule'); };
+    document.body.appendChild(btn);
+  }
 }
 
 function toggleSidebar() {
@@ -1294,10 +1314,7 @@ function renderTeacherScheduleView(students, weekSlots, weekStart) {
     </div>`;
   }
   mobileHTML += '</div>';
-  // 横屏时：独立悬浮退出按钮（固定在屏幕右上角，不被旋转容器遮挡）
-  if (isLandscape) {
-    mobileHTML += `<button class="sch-exit-landscape" onclick="App.scheduleLandscape=false;switchModule('schedule')">✕ 退出横屏</button>`;
-  }
+  // 横屏退出按钮改由 switchModule 统一在 body 层级创建，避免被旋转容器/系统栏遮挡
 
   // 统计
   const totalClasses = weekSlots.length;
@@ -1584,7 +1601,7 @@ function renderStudentScheduleView(students, weekSlots, weekStart) {
         })()}
       </div>
     </div>
-    ${App.scheduleLandscape ? `<button class="sch-exit-landscape" onclick="App.scheduleLandscape=false;switchModule('schedule')">✕ 退出横屏</button>` : ''}
+    <!-- 横屏退出按钮由 switchModule 统一在 body 层级创建 -->
 
     <div class="sch-desktop grid-2">
       <div class="card">

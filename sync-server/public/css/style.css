@@ -971,21 +971,21 @@ ul, ol { list-style: none; }
   letter-spacing: 1px;
 }
 
-/* ===== 横屏模式：表宽拉伸，色块内容完整展示 ===== */
-/* 横屏模式：表格旋转90度，四周留边距适配屏幕不被遮挡 */
+/* ===== 横屏模式：表格旋转90度，四周留边距适配屏幕不被遮挡 ===== */
 .sch-mobile.sch-landscape {
   position: fixed;
   top: 50%;
   left: 50%;
-  width: calc(100vh - 24px);
-  height: calc(100vw - 24px);
+  /* 减去 iOS 安全区 + 额外边距，避免被顶部地址栏/底部 Home 条遮挡 */
+  width: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 56px);
+  height: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 56px);
   transform: translate(-50%, -50%) rotate(90deg);
   transform-origin: center center;
   z-index: 1000;
   background: var(--bg-page, #F5F3F0);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 10px;
+  padding: 6px;
   margin: 0;
   border-radius: 12px;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
@@ -997,43 +997,55 @@ ul, ol { list-style: none; }
   background: transparent !important;
   margin-bottom: 0 !important;
 }
-/* 横屏时隐藏内部切换按钮，改用独立悬浮退出按钮，避免被表格盖住 */
-.sch-mobile.sch-landscape .sch-mode-toggle { display: none; }
+/* 横屏时隐藏内部切换按钮、卡片标题、加课按钮，把空间留给表格 */
+.sch-mobile.sch-landscape .sch-mode-toggle,
+.sch-mobile.sch-landscape .card-title,
+.sch-mobile.sch-landscape .sch-extra-add-btn,
+.sch-mobile.sch-landscape .sch-mobile-header {
+  display: none !important;
+}
 .sch-mobile.sch-landscape .sch-compact-table {
   width: 100%;
-  font-size: 12px;
-}
-.sch-mobile.sch-landscape .sch-compact-table thead th {
-  font-size: 12px;
-  padding: 6px 4px;
-}
-.sch-mobile.sch-landscape .sch-compact-cell {
-  padding: 7px 5px;
-  min-height: 36px;
-}
-.sch-mobile.sch-landscape .sch-compact-name {
-  font-size: 12px;
-}
-.sch-mobile.sch-landscape .sch-compact-info {
   font-size: 10px;
 }
-/* 横屏退出按钮：独立于旋转容器，固定在屏幕右上角，永不被遮挡 */
+.sch-mobile.sch-landscape .sch-compact-table thead th {
+  font-size: 10px;
+  padding: 4px 2px;
+}
+.sch-mobile.sch-landscape .sch-compact-cell {
+  padding: 4px 3px;
+  min-height: 28px;
+}
+.sch-mobile.sch-landscape .sch-compact-name {
+  font-size: 10px;
+}
+.sch-mobile.sch-landscape .sch-compact-info {
+  font-size: 9px;
+}
+/* 横屏退出按钮：在旋转容器内 top-left 对应屏幕右上角，永不被底部 Home 条遮挡 */
 .sch-exit-landscape {
   position: fixed;
   top: 12px;
-  right: 12px;
+  left: 12px;
+  right: auto;
   z-index: 1100;
-  padding: 10px 16px;
-  border-radius: 22px;
+  padding: 8px 14px;
+  border-radius: 20px;
   background: var(--color-primary, #8BAA8B);
   color: #fff;
   border: none;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   box-shadow: 0 2px 10px rgba(0,0,0,0.3);
   cursor: pointer;
 }
 .sch-exit-landscape:active { opacity: 0.8; }
+/* body 层级兜底按钮：真正固定在 viewport 右上角，不受旋转容器影响 */
+#schBodyExitLandscape {
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  left: auto;
+}
 
 @media (max-width: 768px) {
   .sch-desktop { display: none !important; }
