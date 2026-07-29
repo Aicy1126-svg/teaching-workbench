@@ -28,7 +28,8 @@ let ROOT = path.join(__dirname, 'public');
 if (!fs.existsSync(path.join(ROOT, 'index.html'))) {
   ROOT = path.join(__dirname, '..');
 }
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+console.log('[DATA_DIR] 数据目录:', DATA_DIR);
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -184,7 +185,7 @@ const server = http.createServer(async (req, res) => {
   try {
     // ===== 同步 API =====
     if (p === '/api/health' && req.method === 'GET') {
-      return sendJSON(res, 200, { ok: true, time: Date.now() });
+      return sendJSON(res, 200, { ok: true, time: Date.now(), dataDir: DATA_DIR });
     }
     // 返回本机局域网地址，方便手机/平板通过同一 WiFi 连接本机服务器同步
     if (p === '/api/network' && req.method === 'GET') {
