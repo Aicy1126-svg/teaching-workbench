@@ -2045,6 +2045,27 @@ function getSlotActualDate(slot) {
   return slot.doneDate || slot.date || '';
 }
 
+// 根据起止时间计算这节课的课时（小时），例如 19:00-21:30 → 2.5
+function calcSlotHours(slot) {
+  const start = slot.startTime || '';
+  const end = slot.endTime || '';
+  if (!start || !end) return 2; // 无时间则兜底 2 小时
+  const parse = t => {
+    const [h, m] = String(t).split(':').map(Number);
+    return { h: isNaN(h) ? 0 : h, m: isNaN(m) ? 0 : m };
+  };
+  const s = parse(start), e = parse(end);
+  const startMin = s.h * 60 + s.m;
+  const endMin = e.h * 60 + e.m;
+  if (endMin <= startMin) return 2;
+  return (endMin - startMin) / 60;
+}
+// 把小时数格式化为最多两位小数的字符串（2.00→2，2.50→2.5，1.75→1.75）
+function formatDecimalHours(h) {
+  if (typeof h !== 'number' || isNaN(h)) return '0';
+  return h.toFixed(2).replace(/\.00$/, '').replace(/(\.[0-9])0$/, '$1');
+}
+
 function addScheduleSlot(day, time) {
   const students = DB.get('students', { list: [] }).list;
   const studentOptions = students.length > 0
@@ -2813,11 +2834,7 @@ function computeGraduationForecast(student) {
     const sessSum = (sub.sessions || []).reduce((ss, se) => {
       const list = Array.isArray(se.days) ? se.days : [];
       const daysPerWeek = list.length || 0;
-      const sh = parseInt((se.startTime || '').split(':')[0]) || 0;
-      const eh = parseInt((se.endTime || '').split(':')[0]) || 0;
-      const em = parseInt((se.endTime || '').split(':')[1]) || 0;
-      let h = eh - sh + (em > 0 ? 1 : 0);
-      if (isNaN(h) || h <= 0) h = 2;
+      const h = calcSlotHours({ startTime: se.startTime, endTime: se.endTime });
       return ss + h * daysPerWeek;
     }, 0);
     return sum + sessSum;
@@ -2839,7 +2856,7 @@ function editGraduation(studentId) {
   const forecast = computeGraduationForecast(s);
   const forecastHTML = forecast
     ? `<div class="lesson-doc text-sm" style="margin-top:8px">
-        每周上课约：${forecast.weeklyHours} 课时<br>
+        每周上课约：${formatDecimalHours(forecast.weeklyHours)} 课时<br>
         剩余课时：${forecast.remaining} 课时<br>
         预计还需约 <strong>${forecast.weeks}</strong> 周 → 预测结课 <strong>${forecast.predicted}</strong>
       </div>`
@@ -2956,7 +2973,7 @@ Modules.billing = function() {
     const dateObj = dateStr ? new Date(dateStr) : null;
     const monthDay = dateObj ? `${dateObj.getMonth()+1}/${dateObj.getDate()}` : '-';
     const wd = dateObj ? weekDays[dateObj.getDay()] : '-';
-    const hours = 2; // 默认2小时一节课
+    const hours = calcSlotHours(c);
     totalHours += hours;
     rowsHTML += `<tr>
       <td>${idx+1}</td>
@@ -2964,7 +2981,7 @@ Modules.billing = function() {
       <td>${wd}</td>
       <td>${esc(c.subject || '-')}</td>
       <td>${c.startTime}-${c.endTime || ''}</td>
-      <td>${hours}h</td>
+      <td>${formatDecimalHours(hours)}h</td>
     </tr>`;
   });
 
@@ -2988,7 +3005,7 @@ Modules.billing = function() {
   });
 
   billText += `\n━━━━━━━━━━━━━━\n`;
-  billText += `本月共计：${doneClasses.length} 节课，${totalHours} 课时\n`;
+  billText += `本月共计：${doneClasses.length} 节课，${formatDecimalHours(totalHours)} 课时\n`;
   billText += `单价：${Number(unitPrice) || '___'} 元/课时\n`;
   billText += `应收合计：${totalAmount || '___'} 元\n`;
   if (discountNum > 0) billText += `优惠扣除：-${discountNum} 元\n`;
@@ -3036,7 +3053,7 @@ Modules.billing = function() {
       </div>
       <div class="mt-3" style="font-size:14px">
         应收合计：<strong id="billingTotalAmount" style="color:var(--color-primary-dark);font-size:18px">${totalAmount || 0} 元</strong>
-        <span id="billingTotalHint" class="text-light text-xs">（${totalHours} 课时 × ${Number(unitPrice) || 0} 元/课时）</span>
+        <span id="billingTotalHint" class="text-light text-xs">（${formatDecimalHours(totalHours)} 课时 × ${Number(unitPrice) || 0} 元/课时）</span>
         ${discountNum > 0 || reimburseNum > 0 ? `<div style="margin-top:4px">优惠扣除 <strong style="color:var(--color-danger,#c46060)">-${discountNum}</strong> 元，激励报销 <strong style="color:var(--color-success,#5a9e5a)">+${reimburseNum}</strong> 元 → 实收 <strong style="color:var(--color-primary-dark);font-size:16px">${finalAmount} 元</strong></div>` : ''}
       </div>
       <div class="flex gap-2 mt-3 flex-wrap">
@@ -3059,7 +3076,7 @@ Modules.billing = function() {
           <tfoot>
             <tr style="font-weight:700;background:var(--bg-input)">
               <td colspan="5" style="text-align:right">合计</td>
-              <td>${totalHours}课时 / ${doneClasses.length}节</td>
+              <td>${formatDecimalHours(totalHours)}课时 / ${doneClasses.length}节</td>
             </tr>
           </tfoot>
         </table>
@@ -3084,7 +3101,7 @@ Modules.billing = function() {
         <p>1. 在<strong>排课管理</strong>中，上课后将状态标记为「已上完」</p>
         <p>2. 每月月初打开本页面，选择学生和月份</p>
         <p>3. 核对明细无误后，点击「复制对账单」发微信给家长</p>
-        <p>4. 默认每节课 2 小时，需手动填写单价和合计金额</p>
+        <p>4. 系统会根据排课起止时间自动计算课时（如 19:00-21:30 算 2.5 课时），你只需填单价</p>
       </div>
     </div>
   `;
@@ -3116,8 +3133,8 @@ function saveBillingSetting(key, field, value) {
       totalEl.textContent = (total || 0) + ' 元';
       if (hintEl) {
         hintEl.innerHTML = (disc > 0 || reimb > 0)
-          ? `（${totalHours}课时 × ${unit} - 优惠${disc} + 报销${reimb} = 实收 <strong>${finalAmt}</strong>）`
-          : `（${totalHours} 课时 × ${unit} 元/课时）`;
+          ? `（${formatDecimalHours(totalHours)}课时 × ${unit} - 优惠${disc} + 报销${reimb} = 实收 <strong>${finalAmt}</strong>）`
+          : `（${formatDecimalHours(totalHours)} 课时 × ${unit} 元/课时）`;
       }
     }
   }
@@ -3129,7 +3146,7 @@ function recalcBillingTotal(bsKey, totalHours) {
   const bs = settings[bsKey] || {};
   const price = Number(bs.price) || 0;
   const amt = totalHours * price;
-  Toast.show(`已合计：${totalHours} 课时 × ${price} 元 = ${amt || 0} 元`);
+  Toast.show(`已合计：${formatDecimalHours(totalHours)} 课时 × ${price} 元 = ${amt || 0} 元`);
   // 重新渲染整个结算模块，让对账单文本、总价、按钮全部用最新数据重新生成
   switchModule('billing');
 }
@@ -3246,7 +3263,7 @@ function exportBillingImage(studentId, month) {
   const discountImg = Number(bs.discount) || 0;
   const reimburseImg = Number(bs.reimbursement) || 0;
   let totalHoursImg = 0;
-  doneClasses.forEach(c => { totalHoursImg += 2; });
+  doneClasses.forEach(c => { totalHoursImg += calcSlotHours(c); });
   const totalAmountImg = totalHoursImg * unitPrice;
   const canvas = document.createElement('canvas');
   const W = 800;
@@ -3307,12 +3324,13 @@ function exportBillingImage(studentId, month) {
     ctx.fillStyle = '#666';
     ctx.font = '12px -apple-system, sans-serif';
     let cx = 30;
-    const vals = [String(idx+1), monthDay, wd, c.subject || '-', `${c.startTime}-${c.endTime || ''}`, '2h'];
+    const hours = calcSlotHours(c);
+    const vals = [String(idx+1), monthDay, wd, c.subject || '-', `${c.startTime}-${c.endTime || ''}`, `${formatDecimalHours(hours)}h`];
     vals.forEach((val, i) => {
       ctx.fillText(val, cx + 8, yPos + 22);
       cx += cols[i];
     });
-    totalHours += 2;
+    totalHours += hours;
   });
 
   // 合计行
@@ -3322,7 +3340,7 @@ function exportBillingImage(studentId, month) {
   ctx.fillStyle = '#4A4A4A';
   ctx.font = 'bold 13px -apple-system, sans-serif';
   ctx.fillText('合计', 30 + cols[0] + cols[1] + cols[2] + cols[3] + 8, sumY + 22);
-  ctx.fillText(`${totalHours}课时 / ${doneClasses.length}节`, 30 + cols[0] + cols[1] + cols[2] + cols[3] + cols[4] + 8, sumY + 22);
+  ctx.fillText(`${formatDecimalHours(totalHours)}课时 / ${doneClasses.length}节`, 30 + cols[0] + cols[1] + cols[2] + cols[3] + cols[4] + 8, sumY + 22);
 
   // 底部
   const footY = sumY + rowH + 10;
@@ -4269,7 +4287,7 @@ Modules.report = function() {
   const monthClasses = schedule.list.filter(s => s.studentName === studentName && getSlotActualDate(s).startsWith(selectedMonth));
   const doneCount = monthClasses.filter(s => s.status === 'done').length;
   const leaveCount = monthClasses.filter(s => s.status === 'leave').length;
-  const totalHours = monthClasses.length * 2;
+  const totalHours = monthClasses.reduce((sum, c) => sum + calcSlotHours(c), 0);
   const attendanceRate = monthClasses.length > 0 ? Math.round((doneCount / monthClasses.length) * 100) : 0;
 
   const grades = DB.get('grades', { list: [] }).list.filter(g => g.studentName === studentName);
@@ -4714,10 +4732,10 @@ function aiGenerateReportField(studentId, field, month) {
         const subs = d.subjects.length > 0 ? d.subjects : ['当前科目'];
         const weeklyH = (d.student.subjects || []).reduce((sum, sub) => {
           const sessions = sub.sessions || [];
-          return sum + sessions.reduce((s, ss) => { const days = (ss.days||[]).length || 1; return s + days * 2; }, 0);
+          return sum + sessions.reduce((s, ss) => { const days = (ss.days||[]).length || 1; return s + days * calcSlotHours({ startTime: ss.startTime, endTime: ss.endTime }); }, 0);
         }, 0) || 2;
         const weeks = Math.ceil(fc / weeklyH);
-        content += `\n剩余课时约${fc}课时，按当前每周约${weeklyH}课时计算，预计还可上课约${weeks}周。`;
+        content += `\n剩余课时约${fc}课时，按当前每周约${formatDecimalHours(weeklyH)}课时计算，预计还可上课约${weeks}周。`;
       }
       content += '\n\n建议：保持稳定的学习节奏，每月进行一次阶段性检测，及时调整方向。';
       break;
@@ -4775,7 +4793,7 @@ function generateReportTextContent(studentId, month) {
   const schedule = DB.get('schedule', { list: [] });
   const monthClasses = schedule.list.filter(s => s.studentName === name && getSlotActualDate(s).startsWith(month));
   const doneCount = monthClasses.filter(s => s.status === 'done').length;
-  const totalHours = monthClasses.length * 2;
+  const totalHours = monthClasses.reduce((sum, c) => sum + calcSlotHours(c), 0);
   const rate = monthClasses.length > 0 ? Math.round(doneCount / monthClasses.length * 100) : 0;
 
   const grades = DB.get('grades', { list: [] }).list.filter(g => g.studentName === name);
@@ -4797,7 +4815,7 @@ function generateReportTextContent(studentId, month) {
 `【${name}同学 ${y}年${m}月 学情报告】
 ━━━━━━━━━━━━━━━━━━
 一、本月学习概况
-  · 上课 ${monthClasses.length} 节，已上完 ${doneCount} 节，约 ${totalHours} 课时，出勤率 ${rate}%
+  · 上课 ${monthClasses.length} 节，已上完 ${doneCount} 节，约 ${formatDecimalHours(totalHours)} 课时，出勤率 ${rate}%
   · 目标：${rd.targetSchool || '（待设定）'}
 
 ${fld('overview','学习概况')}
