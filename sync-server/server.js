@@ -42,17 +42,18 @@ if (fs.existsSync(USERS_FILE)) {
 }
 async function saveUsers() {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  if (mongo) {
+  if (pg) {
     try {
       for (const username of Object.keys(users)) {
         const u = users[username];
-        await mongo.col.updateOne(
-          { username },
-          { $set: { username, pwdHash: u.pwdHash, createdAt: u.createdAt } },
-          { upsert: true }
+        await pg.pool.query(
+          `INSERT INTO accounts (username, "pwdHash", "createdAt")
+           VALUES ($1, $2, $3)
+           ON CONFLICT (username) DO UPDATE SET "pwdHash"=$2, "createdAt"=$3`,
+          [username, u.pwdHash, u.createdAt]
         );
       }
-    } catch (e) { console.error('[mongo accounts]', e.message); }
+    } catch (e) { console.error('[pg accounts]', e.message); }
   }
 }
 // ===== Token：HMAC 签名，无状态，部署重启不丢失 =====
@@ -97,82 +98,101 @@ function userDocsFile(username) {
   return path.join(DATA_DIR, `data_docs_${safe}.json`);
 }
 
-// ---------- 云存储（MongoDB，可选）----------
-// 设置了环境变量 MONGO_URI 则数据存云端，Railway 重启/重新部署都不丢；否则用本地文件兜底
-let mongo = null; // { client, col }
+// ---------- 云存储（PostgreSQL / Supabase，可选）----------
+// 设置了环境变量 DATABASE_URL 则数据存云端，Railway 重启/重新部署都不丢；否则用本地文件兜底
+let pg = null; // { pool }
 
 async function readUserData(username) {
-  if (mongo) {
+  if (pg) {
     try {
-      const d = await mongo.col.findOne({ username });
-      if (d) return { data: d.data != null ? d.data : null, updatedAt: d.updatedAt || 0 };
-    } catch (e) { console.error('[mongo read]', e.message); }
+      const r = await pg.pool.query('SELECT data, "updatedAt" FROM user_data WHERE username=$1', [username]);
+      if (r.rows.length > 0) return { data: r.rows[0].data, updatedAt: r.rows[0].updatedAt || 0 };
+      return null;
+    } catch (e) { console.error('[pg read]', e.message); }
   }
   const f = userDataFile(username);
   if (fs.existsSync(f)) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
   return null;
 }
 async function writeUserData(username, payload) {
-  if (mongo) {
+  if (pg) {
     try {
-      await mongo.col.updateOne(
-        { username },
-        { $set: { username, data: payload.data, updatedAt: payload.updatedAt } },
-        { upsert: true }
+      await pg.pool.query(
+        `INSERT INTO user_data (username, data, "updatedAt")
+         VALUES ($1, $2, $3)
+         ON CONFLICT (username) DO UPDATE SET data=$2, "updatedAt"=$3`,
+        [username, JSON.stringify(payload.data), payload.updatedAt]
       );
       return;
-    } catch (e) { console.error('[mongo write]', e.message); }
+    } catch (e) { console.error('[pg write]', e.message); }
   }
   fs.writeFileSync(userDataFile(username), JSON.stringify(payload, null, 2));
 }
 async function readUserDocs(username) {
-  if (mongo) {
+  if (pg) {
     try {
-      const d = await mongo.col.findOne({ username });
-      if (d && d.docs !== undefined) return { docs: d.docs, updatedAt: d.docsUpdatedAt || 0 };
-    } catch (e) { console.error('[mongo docs read]', e.message); }
+      const r = await pg.pool.query('SELECT docs, "docsUpdatedAt" FROM user_docs WHERE username=$1', [username]);
+      if (r.rows.length > 0) return { docs: r.rows[0].docs, updatedAt: r.rows[0].docsUpdatedAt || 0 };
+      return { docs: null, updatedAt: 0 };
+    } catch (e) { console.error('[pg docs read]', e.message); }
   }
   const f = userDocsFile(username);
   if (fs.existsSync(f)) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return { docs: null, updatedAt: 0 }; } }
   return { docs: null, updatedAt: 0 };
 }
 async function writeUserDocs(username, payload) {
-  if (mongo) {
+  if (pg) {
     try {
-      await mongo.col.updateOne(
-        { username },
-        { $set: { username, docs: payload.docs, docsUpdatedAt: payload.updatedAt } },
-        { upsert: true }
+      await pg.pool.query(
+        `INSERT INTO user_docs (username, docs, "docsUpdatedAt")
+         VALUES ($1, $2, $3)
+         ON CONFLICT (username) DO UPDATE SET docs=$2, "docsUpdatedAt"=$3`,
+        [username, JSON.stringify(payload.docs), payload.updatedAt]
       );
       return;
-    } catch (e) { console.error('[mongo docs write]', e.message); }
+    } catch (e) { console.error('[pg docs write]', e.message); }
   }
   fs.writeFileSync(userDocsFile(username), JSON.stringify(payload, null, 2));
 }
 
-// 启动时从 MongoDB 加载账号
-async function loadAccountsFromMongo() {
-  const docs = await mongo.col.find({}).toArray();
+// 启动时从 PostgreSQL 加载账号
+async function loadAccountsFromPG() {
+  const r = await pg.pool.query('SELECT username, "pwdHash", "createdAt" FROM accounts');
   const map = {};
-  for (const d of docs) map[d.username] = { pwdHash: d.pwdHash, createdAt: d.createdAt };
+  for (const row of r.rows) map[row.username] = { pwdHash: row.pwdHash, createdAt: row.createdAt };
   return map;
 }
 async function initStorage() {
-  if (!process.env.MONGO_URI) {
-    console.log('[storage] 未设置 MONGO_URI，使用本地文件存储');
+  if (!process.env.DATABASE_URL) {
+    console.log('[storage] 未设置 DATABASE_URL，使用本地文件存储');
     return;
   }
   try {
-    const { MongoClient } = await import('mongodb');
-    const client = new MongoClient(process.env.MONGO_URI, { serverSelectionTimeoutMS: 8000 });
-    await client.connect();
-    const db = client.db('teaching_workbench');
-    mongo = { client, col: db.collection('users') };
-    users = await loadAccountsFromMongo();
-    console.log('[storage] MongoDB 已连接，已加载', Object.keys(users).length, '个账号');
+    const { Pool } = await import('pg');
+    pg = { pool: new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 8000 }) };
+    // 建表（如不存在）
+    await pg.pool.query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        username TEXT PRIMARY KEY,
+        "pwdHash" TEXT,
+        "createdAt" BIGINT
+      );
+      CREATE TABLE IF NOT EXISTS user_data (
+        username TEXT PRIMARY KEY,
+        data JSONB,
+        "updatedAt" BIGINT
+      );
+      CREATE TABLE IF NOT EXISTS user_docs (
+        username TEXT PRIMARY KEY,
+        docs JSONB,
+        "docsUpdatedAt" BIGINT
+      );
+    `);
+    users = await loadAccountsFromPG();
+    console.log('[storage] PostgreSQL 已连接，已加载', Object.keys(users).length, '个账号');
   } catch (e) {
-    console.error('[storage] MongoDB 连接失败，回退本地文件:', e.message);
-    mongo = null;
+    console.error('[storage] PostgreSQL 连接失败，回退本地文件:', e.message);
+    pg = null;
   }
 }
 
@@ -268,7 +288,7 @@ const server = http.createServer(async (req, res) => {
   try {
     // ===== 同步 API =====
     if (p === '/api/health' && req.method === 'GET') {
-      return sendJSON(res, 200, { ok: true, time: Date.now(), dataDir: DATA_DIR });
+      return sendJSON(res, 200, { ok: true, time: Date.now(), dataDir: DATA_DIR, storage: pg ? 'postgresql' : 'local-file' });
     }
     // 返回本机局域网地址，方便手机/平板通过同一 WiFi 连接本机服务器同步
     if (p === '/api/network' && req.method === 'GET') {
