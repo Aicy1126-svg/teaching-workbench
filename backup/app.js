@@ -17,6 +17,10 @@ const App = {
   calendarDate: new Date(),
   scheduleView: 'week', // 'week' | 'month' | 'student'
   selectedStudent: null,
+  billingPeriodType: 'month', // 'month' | 'week' | 'custom'
+  billingPeriod: '',
+  billingCustomStart: '',
+  billingCustomEnd: '',
 };
 
 // ==================== Toast ====================
@@ -387,6 +391,7 @@ const MODULE_NAMES = {
   calendar: '日历看板',
   countdown: '考试倒计时',
   schedule: '排课管理',
+  studentManagement: '学生管理',
   lessonPrep: '备课文档库',
   studentHours: '课消台账',
   grades: '成绩档案',
@@ -1544,6 +1549,7 @@ function renderStudentScheduleView(students, weekSlots, weekStart) {
           const addBar = '<div style="text-align:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
             + `<button class="btn btn-sm btn-secondary" onclick="addStudentExtraSlot('${selected.id}','${esc(selected.name)}')">➕ 加其他课程</button>`
             + `<button class="btn btn-sm btn-primary" onclick="exportScheduleCanvas('parent', '${weekStart}', '${selected.id}')">📥 导出图片</button>`
+            + `<button class="btn btn-sm btn-secondary copy-btn" onclick='copyToClipboard(${JSON.stringify(shareText)});this.classList.add("copied");setTimeout(()=>this.classList.remove("copied"),1500)'>📋 复制文本</button>`
             + '</div>';
 
           if (stSlots.length === 0 && stExtras.length === 0) {
@@ -2416,9 +2422,33 @@ function addStudent() {
       <label class="form-label">学生姓名 *</label>
       <input class="input" id="newStudentName" placeholder="输入学生姓名" autocomplete="off">
     </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">年级</label>
+        <input class="input" id="newStudentGrade" placeholder="如：初二">
+      </div>
+      <div class="form-group">
+        <label class="form-label">学校</label>
+        <input class="input" id="newStudentSchool" placeholder="如：实验中学">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">班级</label>
+        <input class="input" id="newStudentClass" placeholder="如：英语初二基础班">
+      </div>
+      <div class="form-group">
+        <label class="form-label">家长姓名</label>
+        <input class="input" id="newStudentParent" placeholder="如：李伟">
+      </div>
+    </div>
     <div class="form-group">
-      <label class="form-label">家长手机（可选）</label>
+      <label class="form-label">家长手机</label>
       <input class="input" id="newStudentPhone" placeholder="用于结算备注">
+    </div>
+    <div class="form-group">
+      <label class="form-label">标签（用空格分隔）</label>
+      <input class="input" id="newStudentTags" placeholder="如：晚辅 重点学生 薄弱">
     </div>
     <div class="form-group">
       <label class="form-label">个人色板</label>
@@ -2431,7 +2461,7 @@ function addStudent() {
     </div>
     <div class="form-group">
       <label class="form-label">备注（可选）</label>
-      <input class="input" id="newStudentNotes" placeholder="如：初二、需要补基础">
+      <input class="input" id="newStudentNotes" placeholder="如：数学基础薄弱，需要加强计算能力">
     </div>
   `;
   const footer = `<button class="btn btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'))">取消</button><button class="btn btn-primary" onclick="saveNewStudent()">保存</button>`;
@@ -2442,13 +2472,20 @@ function saveNewStudent() {
   const name = document.getElementById('newStudentName').value.trim();
   if (!name) { Toast.show('请输入姓名'); return; }
   const colorVal = document.getElementById('studentColorValue').value;
+  const tagsInput = document.getElementById('newStudentTags').value.trim();
   const data = DB.get('students', { list: [] });
   data.list.push({
     id: DB.uid(),
     name,
+    grade: document.getElementById('newStudentGrade').value.trim(),
+    school: document.getElementById('newStudentSchool').value.trim(),
+    className: document.getElementById('newStudentClass').value.trim(),
+    parentName: document.getElementById('newStudentParent').value.trim(),
     phone: document.getElementById('newStudentPhone').value.trim(),
     notes: document.getElementById('newStudentNotes').value.trim(),
+    tags: tagsInput ? tagsInput.split(/\s+/).filter(Boolean) : [],
     color: colorVal || null,
+    status: 'active',
     createdAt: DB.formatDate(new Date(), 'YYYY-MM-DD'),
     subjects: [],
     graduation: { enabled: false, targetDate: '' },
@@ -2456,7 +2493,7 @@ function saveNewStudent() {
   DB.set('students', data);
   Modal.close(document.querySelector('.modal-overlay'));
   Toast.show('学生已添加');
-  switchModule('schedule');
+  switchModule(App.currentModule === 'studentManagement' ? 'studentManagement' : 'schedule');
 }
 
 function selectStudentColor(el, color) {
@@ -2480,9 +2517,33 @@ function editStudent(id) {
       <label class="form-label">学生姓名</label>
       <input class="input" id="editStudentName" value="${esc(s.name)}" autocomplete="off">
     </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">年级</label>
+        <input class="input" id="editStudentGrade" value="${esc(s.grade || '')}" placeholder="如：初二">
+      </div>
+      <div class="form-group">
+        <label class="form-label">学校</label>
+        <input class="input" id="editStudentSchool" value="${esc(s.school || '')}" placeholder="如：实验中学">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">班级</label>
+        <input class="input" id="editStudentClass" value="${esc(s.className || '')}" placeholder="如：英语初二基础班">
+      </div>
+      <div class="form-group">
+        <label class="form-label">家长姓名</label>
+        <input class="input" id="editStudentParent" value="${esc(s.parentName || '')}" placeholder="如：李伟">
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">家长手机</label>
       <input class="input" id="editStudentPhone" value="${esc(s.phone || '')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">标签（用空格分隔）</label>
+      <input class="input" id="editStudentTags" value="${esc((s.tags || []).join(' '))}" placeholder="如：晚辅 重点学生 薄弱">
     </div>
     <div class="form-group">
       <label class="form-label">个人色板</label>
@@ -2522,14 +2583,20 @@ function saveEditStudent(id) {
   const s = data.list.find(x => x.id === id);
   if (!s) return;
   s.name = document.getElementById('editStudentName').value.trim();
+  s.grade = document.getElementById('editStudentGrade').value.trim();
+  s.school = document.getElementById('editStudentSchool').value.trim();
+  s.className = document.getElementById('editStudentClass').value.trim();
+  s.parentName = document.getElementById('editStudentParent').value.trim();
   s.phone = document.getElementById('editStudentPhone').value.trim();
+  const tagsInput = document.getElementById('editStudentTags').value.trim();
+  s.tags = tagsInput ? tagsInput.split(/\s+/).filter(Boolean) : [];
   s.notes = document.getElementById('editStudentNotes').value.trim();
   const colorVal = document.getElementById('editStudentColorValue').value;
   s.color = colorVal || null;
   DB.set('students', data);
   Modal.close(document.querySelector('.modal-overlay'));
   Toast.show('已更新');
-  switchModule('schedule');
+  switchModule(App.currentModule === 'studentManagement' ? 'studentManagement' : 'schedule');
 }
 
 function deleteStudent(id) {
@@ -2550,7 +2617,7 @@ function deleteStudent(id) {
   DB.set('schedule', schedule);
   Modal.close(document.querySelector('.modal-overlay'));
   Toast.show('已删除，并清理排课表 ' + (before - schedule.list.length) + ' 条记录');
-  switchModule('schedule');
+  switchModule(App.currentModule === 'studentManagement' ? 'studentManagement' : 'schedule');
 }
 
 // ---------- 学生各科目固定上课时间管理 ----------
@@ -2905,13 +2972,117 @@ function saveGraduation(studentId) {
   editStudent(studentId);
 }
 
-// ---------- 课时结算模块（月度对账单）----------
+// ---------- 课时结算辅助函数 ----------
+// 获取 ISO 周次（如 2026-W30）
+function getISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { year: d.getUTCFullYear(), week: weekNo };
+}
+function formatISOWeek(year, week) {
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+function parseISOWeek(str) {
+  const m = str.match(/^(\d{4})-W(\d{2})$/);
+  if (!m) return null;
+  return { year: parseInt(m[1], 10), week: parseInt(m[2], 10) };
+}
+// 由 ISO 周次得到周一日期
+function getMondayOfISOWeek(year, week) {
+  const simple = new Date(year, 0, 1 + (week - 1) * 7);
+  const dow = simple.getDay();
+  const ISOweekStart = simple;
+  if (dow <= 4) ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+  else ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+  return ISOweekStart;
+}
+// 周期范围：返回 { start, end } 日期字符串 YYYY-MM-DD
+function getBillingPeriodRange(type, period, customStart, customEnd) {
+  if (type === 'month') {
+    const [y, m] = (period || '').split('-');
+    if (!y || !m) return null;
+    const start = `${y}-${m}-01`;
+    const endDate = new Date(parseInt(y, 10), parseInt(m, 10), 0);
+    const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+    return { start, end };
+  }
+  if (type === 'week') {
+    const parsed = parseISOWeek(period);
+    if (!parsed) return null;
+    const mon = getMondayOfISOWeek(parsed.year, parsed.week);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { start: fmt(mon), end: fmt(sun) };
+  }
+  if (type === 'custom') {
+    if (!customStart || !customEnd) return null;
+    return { start: customStart, end: customEnd };
+  }
+  return null;
+}
+// 周期展示标签
+function getBillingPeriodLabel(type, period, customStart, customEnd) {
+  if (type === 'month') {
+    const [y, m] = (period || '').split('-');
+    return `${y}年${parseInt(m || '0', 10)}月`;
+  }
+  if (type === 'week') {
+    const parsed = parseISOWeek(period);
+    if (!parsed) return period;
+    const mon = getMondayOfISOWeek(parsed.year, parsed.week);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const fmt = d => `${d.getMonth() + 1}/${d.getDate()}`;
+    return `${parsed.year}年第${parsed.week}周（${fmt(mon)}-${fmt(sun)}）`;
+  }
+  if (type === 'custom') {
+    return `${customStart || '?'} 至 ${customEnd || '?'}`;
+  }
+  return period;
+}
+// 课程日期是否在周期范围内
+function isSlotInPeriod(slot, range) {
+  if (!range) return false;
+  const d = getSlotActualDate(slot);
+  return d >= range.start && d <= range.end;
+}
+// 当前周期的存储 key（用于结算设置）
+function getBillingPeriodKey(type, period) {
+  return `${type}_${period}`;
+}
+
+// ---------- 课时结算模块（支持月/周/自定义周期）----------
 Modules.billing = function() {
   const students = DB.get('students', { list: [] }).list;
 
   // 默认选当前月份
   const now = new Date();
-  const selectedMonth = App.billingMonth || `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const currentISO = getISOWeek(now);
+  const currentWeek = formatISOWeek(currentISO.year, currentISO.week);
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  // 周期类型
+  const periodType = App.billingPeriodType || 'month';
+
+  // 默认周期
+  let defaultPeriod = currentMonth;
+  if (periodType === 'week') defaultPeriod = currentWeek;
+  if (periodType === 'custom') {
+    if (!App.billingCustomStart) App.billingCustomStart = todayStr;
+    if (!App.billingCustomEnd) App.billingCustomEnd = todayStr;
+    defaultPeriod = `${App.billingCustomStart}_${App.billingCustomEnd}`;
+  }
+  const selectedPeriod = App.billingPeriod || defaultPeriod;
+
+  // 兼容旧数据：如果 App.billingMonth 存在且未设置新周期，先迁移
+  if (App.billingMonth && !App.billingPeriod) {
+    App.billingPeriod = App.billingMonth;
+    App.billingPeriodType = 'month';
+  }
+
   const selectedStudent = App.billingStudent || (students.length > 0 ? students[0].id : '');
 
   // 学生选择下拉
@@ -2924,7 +3095,7 @@ Modules.billing = function() {
   if (students.length === 0) {
     return `
       <div class="module-header">
-        <div><div class="module-title">课时结算</div><div class="module-subtitle">月度对账单 · 先上课后收费</div></div>
+        <div><div class="module-title">课时结算</div><div class="module-subtitle">灵活周期对账单 · 先上课后收费</div></div>
       </div>
       <div class="empty-state">
         <div class="empty-state-icon">💰</div>
@@ -2932,28 +3103,75 @@ Modules.billing = function() {
       </div>`;
   }
 
-  // 月份选择
-  const [selYear, selMonth] = selectedMonth.split('-');
-  const monthLabel = `${selYear}年${selMonth}月`;
+  // 周期范围计算
+  const periodRange = getBillingPeriodRange(periodType, selectedPeriod, App.billingCustomStart, App.billingCustomEnd);
+  const periodLabel = getBillingPeriodLabel(periodType, selectedPeriod, App.billingCustomStart, App.billingCustomEnd);
 
-  // 生成最近12个月选项
+  // 月份选择（按月时）
   let monthOptions = '';
   for (let i = 0; i < 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
-    monthOptions += `<option value="${val}" ${val === selectedMonth ? 'selected' : ''}>${label}</option>`;
+    monthOptions += `<option value="${val}" ${val === selectedPeriod ? 'selected' : ''}>${label}</option>`;
   }
+
+  // 周选择（按周时）
+  let weekOptions = '';
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i * 7);
+    const iso = getISOWeek(d);
+    const val = formatISOWeek(iso.year, iso.week);
+    const mon = getMondayOfISOWeek(iso.year, iso.week);
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const label = `${iso.year}年第${iso.week}周（${mon.getMonth()+1}/${mon.getDate()}-${sun.getMonth()+1}/${sun.getDate()}）`;
+    weekOptions += `<option value="${val}" ${val === selectedPeriod ? 'selected' : ''}>${label}</option>`;
+  }
+
+  // 周期类型切换控件
+  const typeTabs = `
+    <div class="segmented mb-3">
+      <button class="${periodType === 'month' ? 'active' : ''}" onclick="App.billingPeriodType='month';App.billingPeriod='${currentMonth}';switchModule('billing')">按月</button>
+      <button class="${periodType === 'week' ? 'active' : ''}" onclick="App.billingPeriodType='week';App.billingPeriod='${currentWeek}';switchModule('billing')">按周</button>
+      <button class="${periodType === 'custom' ? 'active' : ''}" onclick="App.billingPeriodType='custom';App.billingCustomStart='${todayStr}';App.billingCustomEnd='${todayStr}';App.billingPeriod='${todayStr}_${todayStr}';switchModule('billing')">自定义</button>
+    </div>
+  `;
+  const periodSelector = periodType === 'month' ? `
+    <div class="form-group">
+      <label class="form-label">选择月份</label>
+      <select class="select" onchange="App.billingPeriod=this.value;switchModule('billing')" style="max-width:260px">
+        ${monthOptions}
+      </select>
+    </div>` : periodType === 'week' ? `
+    <div class="form-group">
+      <label class="form-label">选择周次</label>
+      <select class="select" onchange="App.billingPeriod=this.value;switchModule('billing')" style="max-width:360px">
+        ${weekOptions}
+      </select>
+    </div>` : `
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">开始日期</label>
+        <input type="date" class="input" value="${App.billingCustomStart || todayStr}" onchange="App.billingCustomStart=this.value;App.billingPeriod=App.billingCustomStart+'_'+App.billingCustomEnd;switchModule('billing')">
+      </div>
+      <div class="form-group">
+        <label class="form-label">结束日期</label>
+        <input type="date" class="input" value="${App.billingCustomEnd || todayStr}" onchange="App.billingCustomEnd=this.value;App.billingPeriod=App.billingCustomStart+'_'+App.billingCustomEnd;switchModule('billing')">
+      </div>
+    </div>`;
 
   // 筛选该学生该月已上完的课
   const schedule = DB.get('schedule', { list: [] });
   const studentObj = students.find(s => s.id === selectedStudent);
   const studentName = studentObj ? studentObj.name : '';
 
-  // 结算设置（老师名 / 单价），按 学生+月份 记忆
+  // 结算设置（老师名 / 单价），按 学生+周期 记忆
   const billingSettings = DB.get('billingSettings', {});
-  const bsKey = `${selectedStudent}_${selectedMonth}`;
-  const bs = billingSettings[bsKey] || {};
+  const bsKey = `${selectedStudent}_${periodType}_${selectedPeriod}`;
+  // 兼容旧数据：旧 key 是学生+月份（如 student_2026-07）
+  const legacyBsKey = `${selectedStudent}_${selectedPeriod}`;
+  const legacyBs = (periodType === 'month' && billingSettings[legacyBsKey]) ? billingSettings[legacyBsKey] : {};
+  const bs = billingSettings[bsKey] || legacyBs || {};
   const teacherName = bs.teacher || '';
   const unitPrice = bs.price || 0;
   const discountVal = bs.discount || 0;
@@ -2962,8 +3180,7 @@ Modules.billing = function() {
   const doneClasses = schedule.list.filter(s => {
     if (s.studentName !== studentName) return false;
     if (s.status !== 'done') return false;
-    const actualDate = getSlotActualDate(s);
-    return actualDate.startsWith(selectedMonth);
+    return isSlotInPeriod(s, periodRange);
   }).sort((a, b) => getSlotActualDate(a).localeCompare(getSlotActualDate(b)));
 
   const weekDays = ['周日','周一','周二','周三','周四','周五','周六'];
@@ -2995,11 +3212,12 @@ Modules.billing = function() {
   const finalAmount = totalAmount - discountNum + reimburseNum;
 
   // 生成结算文本（优惠/报销仅在有值时写入）
-  let billText = `【${studentName}同学 ${monthLabel}课时对账单】\n\n`;
+  const periodTypeText = { month: '月', week: '周', custom: '周期' }[periodType];
+  let billText = `【${studentName}同学 ${periodLabel}课时对账单】\n\n`;
   billText += `教师：${teacherName || '___老师'}\n`;
-  billText += `结算周期：${monthLabel}\n`;
+  billText += `结算周期：${periodLabel}\n`;
   billText += `━━━━━━━━━━━━━━\n\n`;
-  billText += `本月上课明细：\n`;
+  billText += `上课明细：\n`;
 
   doneClasses.forEach((c, idx) => {
     const dateStr = getSlotActualDate(c);
@@ -3007,7 +3225,7 @@ Modules.billing = function() {
   });
 
   billText += `\n━━━━━━━━━━━━━━\n`;
-  billText += `本月共计：${doneClasses.length} 节课，${formatDecimalHours(totalHours)} 课时\n`;
+  billText += `本${periodTypeText}共计：${doneClasses.length} 节课，${formatDecimalHours(totalHours)} 课时\n`;
   billText += `单价：${Number(unitPrice) || '___'} 元/课时\n`;
   billText += `应收合计：${totalAmount || '___'} 元\n`;
   if (discountNum > 0) billText += `优惠扣除：-${discountNum} 元\n`;
@@ -3020,18 +3238,14 @@ Modules.billing = function() {
     <div class="module-header">
       <div>
         <div class="module-title">课时结算</div>
-        <div class="module-subtitle">月度对账单 · 先上课后收费 · 每月结算</div>
+        <div class="module-subtitle">灵活周期对账单 · 先上课后收费 · ${periodTypeText}度结算</div>
       </div>
     </div>
 
     <div class="card mb-3">
       <script>window._billingTotalHours = ${totalHours};</script>
-      <div class="form-group">
-        <label class="form-label">选择月份</label>
-        <select class="select" onchange="App.billingMonth=this.value;switchModule('billing')" style="max-width:200px">
-          ${monthOptions}
-        </select>
-      </div>
+      ${typeTabs}
+      ${periodSelector}
       ${studentSelectHTML}
       <div class="grid-2 mt-3">
         <div class="form-group" style="margin-bottom:0">
@@ -3050,7 +3264,7 @@ Modules.billing = function() {
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">激励报销（元）</label>
-          <input class="input" id="billingReimburse" type="number" min="0" step="1" value="${reimburseNum ? esc(reimburseNum) : ''}" placeholder="如：50" oninput="saveBillingSetting('${bsKey}', 'reimbursement', this.value)">
+          <input class="input" id="billingReimburse" type="number" min="0" step="1" value="${reimburseNum ? esc(discountNum) : ''}" placeholder="如：50" oninput="saveBillingSetting('${bsKey}', 'reimbursement', this.value)">
         </div>
       </div>
       <div class="mt-3" style="font-size:14px">
@@ -3062,15 +3276,15 @@ Modules.billing = function() {
         <button class="btn btn-primary" onclick="recalcBillingTotal('${bsKey}', ${totalHours})">🧮 一键合计</button>
         ${bs.settled
           ? `<span class="badge badge-success">✅ 已结算 · 入账 ${esc(bs.settledDate || '')}</span><button class="btn btn-sm btn-secondary" onclick="switchModule('ledger')">查看入账记录</button>`
-          : `<button class="btn btn-success" onclick="openSettleModal('${selectedStudent}','${selectedMonth}',${totalAmount || 0})">✔ 标记为已结算</button>`}
+          : `<button class="btn btn-success" onclick="openSettleModal('${selectedStudent}','${bsKey}',${totalAmount || 0})">✔ 标记为已结算</button>`}
       </div>
     </div>
 
     <div class="grid-2">
       <!-- 明细表格 -->
       <div class="card">
-        <div class="card-title">📊 ${esc(studentName)} · ${monthLabel} 上课明细</div>
-        ${doneClasses.length === 0 ? '<div class="empty-state"><div class="empty-state-text">本月暂无已上完的课程</div></div>' : `
+        <div class="card-title">📊 ${esc(studentName)} · ${periodLabel} 上课明细</div>
+        ${doneClasses.length === 0 ? `<div class="empty-state"><div class="empty-state-text">本${periodTypeText}暂无已上完的课程</div></div>` : `
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
         <table class="schedule-table">
           <thead><tr><th>#</th><th>上课日期</th><th>周几</th><th>科目</th><th>时间</th><th>课时</th></tr></thead>
@@ -3092,7 +3306,7 @@ Modules.billing = function() {
         <div class="lesson-doc" style="font-size:13px;white-space:pre-wrap">${esc(billText)}</div>
         <div class="flex gap-2 mt-3 flex-wrap">
           <button class="btn btn-primary copy-btn" onclick='copyToClipboard(${JSON.stringify(billText)});this.classList.add("copied");setTimeout(()=>this.classList.remove("copied"),1500)'>📋 复制对账单</button>
-          <button class="btn btn-secondary" onclick="exportBillingImage('${selectedStudent}','${selectedMonth}')">📸 导出图片</button>
+          <button class="btn btn-secondary" onclick="exportBillingImage('${selectedStudent}','${bsKey}')">📸 导出图片</button>
         </div>
       </div>
     </div>
@@ -3101,7 +3315,7 @@ Modules.billing = function() {
       <div class="card-title">💡 使用说明</div>
       <div class="text-sm text-secondary">
         <p>1. 在<strong>排课管理</strong>中，上课后将状态标记为「已上完」</p>
-        <p>2. 每月月初打开本页面，选择学生和月份</p>
+        <p>2. 打开本页面，选择结算周期类型（按月 / 按周 / 自定义日期范围）和学生</p>
         <p>3. 核对明细无误后，点击「复制对账单」发微信给家长</p>
         <p>4. 系统会根据排课起止时间自动计算课时（如 19:00-21:30 算 2.5 课时），你只需填单价</p>
       </div>
@@ -3110,7 +3324,7 @@ Modules.billing = function() {
 };
 Modules.billing.bindEvents = function() {};
 
-// 保存课时结算设置（老师名 / 单价 / 优惠 / 报销），按 学生+月份 记忆，并触发云同步
+// 保存课时结算设置（老师名 / 单价 / 优惠 / 报销），按 学生+周期 记忆，并触发云同步
 function saveBillingSetting(key, field, value) {
   const settings = DB.get('billingSettings', {});
   if (!settings[key]) settings[key] = {};
@@ -3162,13 +3376,28 @@ function setBillingRecords(list) {
   if (typeof Sync !== 'undefined' && Sync.isLoggedIn && Sync.isLoggedIn()) Sync.scheduleSync();
 }
 
+// 从 bsKey 解析学生和周期信息（bsKey = studentId_type_period）
+function parseBillingKey(bsKey) {
+  const parts = (bsKey || '').split('_');
+  if (parts.length >= 3) {
+    return { studentId: parts[0], type: parts[1], period: parts.slice(2).join('_') };
+  }
+  // 兼容旧 key：studentId_YYYY-MM
+  if (parts.length === 2 && /^\d{4}-\d{2}$/.test(parts[1])) {
+    return { studentId: parts[0], type: 'month', period: parts[1] };
+  }
+  return { studentId: bsKey, type: 'month', period: '' };
+}
+
 // 打开「标记为已结算」弹窗：可改实收金额(默认带出实收价)、填入账日期(默认今天)、备注
-function openSettleModal(studentId, month, defaultAmount) {
+function openSettleModal(studentId, bsKey, defaultAmount) {
   const students = DB.get('students', { list: [] }).list;
   const student = students.find(s => s.id === studentId);
   const studentName = student ? student.name : '';
+  const parsed = parseBillingKey(bsKey);
+  const periodLabel = getBillingPeriodLabel(parsed.type, parsed.period, App.billingCustomStart, App.billingCustomEnd);
   const today = new Date().toISOString().slice(0, 10);
-  const billSettings = DB.get('billingSettings', {})[`${studentId}_${month}`] || {};
+  const billSettings = DB.get('billingSettings', {})[bsKey] || {};
   const d = Number(billSettings.discount) || 0;
   const r = Number(billSettings.reimbursement) || 0;
   const finalVal = defaultAmount - d + r;
@@ -3183,7 +3412,7 @@ function openSettleModal(studentId, month, defaultAmount) {
   const body = `
     <div class="form-group">
       <label class="form-label">学生</label>
-      <input class="input" value="${esc(studentName)} · ${esc(month)}" disabled>
+      <input class="input" value="${esc(studentName)} · ${esc(periodLabel)}" disabled>
     </div>
     ${breakdown}
     <div class="form-group">
@@ -3200,12 +3429,12 @@ function openSettleModal(studentId, month, defaultAmount) {
     </div>`;
   const footer = `
     <button class="btn btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'))">取消</button>
-    <button class="btn btn-success" onclick="markAsSettled('${studentId}','${month}')">确认入账</button>`;
+    <button class="btn btn-success" onclick="markAsSettled('${studentId}','${bsKey}')">确认入账</button>`;
   Modal.show('标记为已结算', body, footer);
 }
 
-// 确认结算：写入记账记录 + 标记该学生+月份已结算
-function markAsSettled(studentId, month) {
+// 确认结算：写入记账记录 + 标记该学生+周期已结算
+function markAsSettled(studentId, bsKey) {
   const students = DB.get('students', { list: [] }).list;
   const student = students.find(s => s.id === studentId);
   const studentName = student ? student.name : '';
@@ -3214,16 +3443,19 @@ function markAsSettled(studentId, month) {
   const note = document.getElementById('settleNote').value.trim();
   if (amount <= 0) { Toast.show('请输入大于 0 的实收金额'); return; }
 
-  const billSettings = DB.get('billingSettings', {})[`${studentId}_${month}`] || {};
+  const billSettings = DB.get('billingSettings', {})[bsKey] || {};
   const discount = Number(billSettings.discount) || 0;
   const reimbursement = Number(billSettings.reimbursement) || 0;
 
+  const parsed = parseBillingKey(bsKey);
+  const periodLabel = getBillingPeriodLabel(parsed.type, parsed.period, App.billingCustomStart, App.billingCustomEnd);
+
   const records = getBillingRecords();
-  // 同一学生+月份若已结算，更新而非重复
-  const idx = records.findIndex(r => r.studentId === studentId && r.month === month);
+  // 同一学生+周期若已结算，更新而非重复
+  const idx = records.findIndex(r => r.studentId === studentId && r.bsKey === bsKey);
   const record = {
     id: idx >= 0 ? records[idx].id : ('br_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)),
-    studentId, studentName, month, amount, paidDate, note, discount, reimbursement,
+    studentId, studentName, bsKey, periodType: parsed.type, period: parsed.period, periodLabel, month: periodLabel, amount, paidDate, note, discount, reimbursement,
     createdAt: idx >= 0 ? records[idx].createdAt : Date.now()
   };
   if (idx >= 0) records[idx] = record; else records.push(record);
@@ -3231,7 +3463,6 @@ function markAsSettled(studentId, month) {
 
   // 标记已结算状态
   const settings = DB.get('billingSettings', {});
-  const bsKey = `${studentId}_${month}`;
   if (!settings[bsKey]) settings[bsKey] = {};
   settings[bsKey].settled = true;
   settings[bsKey].settledDate = paidDate;
@@ -3243,23 +3474,26 @@ function markAsSettled(studentId, month) {
   switchModule('billing');
 }
 
-function exportBillingImage(studentId, month) {
+function exportBillingImage(studentId, bsKey) {
   hideExportBg();
   const schedule = DB.get('schedule', { list: [] });
   const students = DB.get('students', { list: [] }).list;
   const student = students.find(s => s.id === studentId);
   if (!student) { Toast.show('学生不存在'); return; }
 
+  const parsed = parseBillingKey(bsKey);
+  const periodRange = getBillingPeriodRange(parsed.type, parsed.period, App.billingCustomStart, App.billingCustomEnd);
+  const periodLabel = getBillingPeriodLabel(parsed.type, parsed.period, App.billingCustomStart, App.billingCustomEnd);
+
   const doneClasses = schedule.list.filter(s => {
     if (s.studentName !== student.name) return false;
     if (s.status !== 'done') return false;
-    return getSlotActualDate(s).startsWith(month);
+    return isSlotInPeriod(s, periodRange);
   }).sort((a, b) => getSlotActualDate(a).localeCompare(getSlotActualDate(b)));
 
-  const [y, m] = month.split('-');
-  // 读取该学生+月份的设置（老师名 / 单价 / 优惠 / 报销）
+  // 读取该学生+周期的设置（老师名 / 单价 / 优惠 / 报销）
   const billingSettings = DB.get('billingSettings', {});
-  const bs = billingSettings[`${studentId}_${month}`] || {};
+  const bs = billingSettings[bsKey] || {};
   const teacherName = bs.teacher || '';
   const unitPrice = Number(bs.price) || 0;
   const discountImg = Number(bs.discount) || 0;
@@ -3286,11 +3520,11 @@ function exportBillingImage(studentId, month) {
   // 标题
   ctx.fillStyle = '#4A4A4A';
   ctx.font = 'bold 20px -apple-system, sans-serif';
-  ctx.fillText(`${student.name}同学 ${y}年${m}月 课时对账单`, 30, 40);
+  ctx.fillText(`${student.name}同学 课时对账单`, 30, 40);
 
   ctx.font = '13px -apple-system, sans-serif';
   ctx.fillStyle = '#999';
-  ctx.fillText(`教师：${teacherName || '___老师'}    |    结算周期：${y}年${m}月`, 30, 68);
+  ctx.fillText(`教师：${teacherName || '___老师'}    |    结算周期：${periodLabel}`, 30, 68);
   ctx.fillText(`生成日期：${DB.formatDate(new Date(), 'YYYY-MM-DD')}`, 30, 88);
 
   // 表格
@@ -3725,6 +3959,160 @@ function copyLessonContent(id, type) {
   if (!lesson) return;
   const text = type === 'student' ? lesson.studentVersion : lesson.teacherVersion;
   copyToClipboard(text || '暂无内容');
+}
+
+// ---------- 6b. 学生管理 ----------
+Modules.studentManagement = function() {
+  const students = DB.get('students', { list: [] }).list;
+
+  // 筛选状态
+  const filterCategory = App.studentFilterCategory || 'all';
+  const searchQuery = (App.studentSearchQuery || '').toLowerCase();
+  const filterClass = App.studentFilterClass || 'all';
+  const showArchived = App.studentShowArchived || false;
+
+  // 计算统计数据
+  const allCount = students.length;
+  const nightCount = students.filter(s => (s.tags || []).includes('晚辅')).length;
+  const englishCount = students.filter(s => (s.subjects || []).some(sub => (sub.subject || '').includes('英语'))).length;
+  const mathCount = students.filter(s => (s.subjects || []).some(sub => (sub.subject || '').includes('数学'))).length;
+  const archivedCount = students.filter(s => s.status === 'archived').length;
+
+  // 班级列表
+  const classSet = new Set();
+  students.forEach(s => { if (s.className) classSet.add(s.className); });
+  const classes = Array.from(classSet).sort();
+
+  // 筛选学生
+  let filtered = students.filter(s => {
+    if (!showArchived && s.status === 'archived') return false;
+    if (filterCategory === 'night') return (s.tags || []).includes('晚辅');
+    if (filterCategory === 'english') return (s.subjects || []).some(sub => (sub.subject || '').includes('英语'));
+    if (filterCategory === 'math') return (s.subjects || []).some(sub => (sub.subject || '').includes('数学'));
+    if (filterCategory === 'archived') return s.status === 'archived';
+    return true;
+  });
+
+  if (searchQuery) {
+    filtered = filtered.filter(s => {
+      const text = `${s.name} ${s.grade || ''} ${s.school || ''} ${s.className || ''} ${s.parentName || ''} ${s.notes || ''} ${(s.tags || []).join(' ')}`.toLowerCase();
+      return text.includes(searchQuery);
+    });
+  }
+
+  if (filterClass !== 'all') {
+    filtered = filtered.filter(s => s.className === filterClass);
+  }
+
+  // 渲染统计标签
+  const statItem = (key, num, label, active) => `
+    <div class="student-stat ${active ? 'active' : ''}" onclick="App.studentFilterCategory='${key}';App.studentSearchQuery='';switchModule('studentManagement')">
+      <div class="num">${num}</div>
+      <div class="label">${label}</div>
+    </div>
+  `;
+
+  const statsHTML = `
+    <div class="student-stats-bar">
+      ${statItem('all', allCount, '全部', filterCategory === 'all')}
+      ${statItem('night', nightCount, '晚辅', filterCategory === 'night')}
+      ${statItem('english', englishCount, '英语', filterCategory === 'english')}
+      ${statItem('math', mathCount, '数学', filterCategory === 'math')}
+      ${statItem('archived', archivedCount, '已归档', filterCategory === 'archived')}
+    </div>
+  `;
+
+  // 搜索和筛选
+  const filterHTML = `
+    <div class="student-search-row">
+      <input type="text" class="input" placeholder="搜索学生姓名、年级、学校..." value="${esc(App.studentSearchQuery || '')}" oninput="App.studentSearchQuery=this.value.trim();switchModule('studentManagement')">
+      <select class="select" style="width:140px" onchange="App.studentFilterClass=this.value;switchModule('studentManagement')">
+        <option value="all">全部班级</option>
+        ${classes.map(c => `<option value="${esc(c)}" ${filterClass === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+      </select>
+      <button class="btn btn-primary" onclick="addStudent()">➕ 添加学生</button>
+    </div>
+  `;
+
+  // 渲染学生卡片
+  const cardsHTML = filtered.length === 0 ? `
+    <div class="empty-state">
+      <div class="empty-state-icon">👩‍🎓</div>
+      <div class="empty-state-text">暂无匹配的学生</div>
+    </div>
+  ` : `
+    <div class="item-grid">
+      ${filtered.map(s => renderStudentCard(s)).join('')}
+    </div>
+  `;
+
+  return `
+    <div class="module-header">
+      <div>
+        <div class="module-title">学生管理</div>
+        <div class="module-subtitle">管理学生档案、科目、班级与联系信息</div>
+      </div>
+      <div class="module-actions">
+        <button class="btn btn-secondary" onclick="App.studentShowArchived=${!showArchived};switchModule('studentManagement')">${showArchived ? '隐藏归档' : '显示归档'}</button>
+      </div>
+    </div>
+    ${statsHTML}
+    ${filterHTML}
+    ${cardsHTML}
+  `;
+};
+Modules.studentManagement.bindEvents = function() {};
+Modules.studentManagement.init = function() {};
+
+function renderStudentCard(s) {
+  const avatarText = s.name ? s.name.slice(-2) : '?';
+  const color = s.color || getStudentColor(s.name);
+  const meta = [s.grade, s.school].filter(Boolean).join(' · ');
+  const subjects = (s.subjects || []).map(sub => sub.subject).filter(Boolean);
+  const tags = s.tags || [];
+
+  // 科目标签
+  const subjectTags = subjects.slice(0, 5).map(sub => `<span class="student-tag subject">${esc(sub)}</span>`).join('');
+  // 其他标签分类
+  const classTag = s.className ? `<span class="student-tag class">🎓 ${esc(s.className)}</span>` : '';
+  const statusTag = s.status === 'archived' ? `<span class="student-tag weak">已归档</span>` : `<span class="student-tag level">active</span>`;
+  const extraTags = tags.slice(0, 3).map(t => `<span class="student-tag">${esc(t)}</span>`).join('');
+
+  return `
+    <div class="student-card" onclick="editStudent('${s.id}')">
+      <div class="student-card-header">
+        <div class="student-avatar" style="background:${color}">${esc(avatarText)}</div>
+        <div class="student-info">
+          <div class="student-name">${esc(s.name)}</div>
+          <div class="student-meta">${esc(meta || '暂无年级学校信息')}</div>
+        </div>
+      </div>
+      <div class="student-tags">
+        ${statusTag}
+        ${classTag}
+        ${subjectTags}
+        ${extraTags}
+      </div>
+      <div class="student-card-body">
+        ${s.parentName ? `<div>家长：${esc(s.parentName)} ${s.phone ? esc(s.phone) : ''}</div>` : (s.phone ? `<div>联系方式：${esc(s.phone)}</div>` : '')}
+        ${s.notes ? `<div>备注：${esc(s.notes)}</div>` : ''}
+      </div>
+      <div class="student-card-footer">
+        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editStudent('${s.id}')">✏️ 编辑</button>
+        <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();toggleStudentArchive('${s.id}')">${s.status === 'archived' ? '恢复' : '归档'}</button>
+      </div>
+    </div>
+  `;
+}
+
+function toggleStudentArchive(id) {
+  const data = DB.get('students', { list: [] });
+  const s = data.list.find(x => x.id === id);
+  if (!s) return;
+  s.status = s.status === 'archived' ? 'active' : 'archived';
+  DB.set('students', data);
+  Toast.show(s.status === 'archived' ? '已归档' : '已恢复');
+  switchModule('studentManagement');
 }
 
 // ---------- 7. 课消台账 ----------
@@ -5850,6 +6238,7 @@ Modules.personalize = function() {
     { key: 'calendar', name: '日历看板', icon: '📅' },
     { key: 'countdown', name: '考试倒计时', icon: '⏰' },
     { key: 'schedule', name: '排课管理', icon: '📋' },
+    { key: 'studentManagement', name: '学生管理', icon: '👩‍🎓' },
     { key: 'lessonPrep', name: '备课文档库', icon: '📝' },
     { key: 'studentHours', name: '课消台账', icon: '📊' },
     { key: 'grades', name: '成绩档案', icon: '📈' },

@@ -1235,6 +1235,75 @@ ul, ol { list-style: none; }
   gap: 16px;
 }
 
+/* ========== 学生管理卡片 ========== */
+.student-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.student-card:hover { box-shadow: var(--shadow-md); }
+.student-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.student-avatar {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  background: var(--color-primary);
+}
+.student-info { flex: 1; min-width: 0; }
+.student-name { font-size: 16px; font-weight: 700; color: var(--text-main); }
+.student-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.student-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.student-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 500;
+  background: var(--theme-glass-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--theme-glass-border);
+}
+.student-tag.subject { background: #E8F0FE; color: #4A6FA5; }
+.student-tag.class { background: #F3E8F7; color: #7A5299; }
+.student-tag.level { background: #FEF3E2; color: #8A6A30; }
+.student-tag.weak { background: #FBE8E8; color: #A05050; }
+.student-card-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.student-card-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding-top: 10px; border-top: 1px solid var(--border-light);
+}
+.student-stats-bar {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.student-stat {
+  padding: 8px 14px; border-radius: var(--radius-md);
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  text-align: center; min-width: 70px;
+}
+.student-stat.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+.student-stat .num { font-size: 18px; font-weight: 700; }
+.student-stat .label { font-size: 11px; opacity: 0.9; }
+.student-search-row {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;
+}
+.student-search-row .input { flex: 1; min-width: 200px; }
+
 /* ========== 成绩趋势图 ========== */
 .chart-container { position: relative; width: 100%; }
 canvas { max-width: 100%; }
