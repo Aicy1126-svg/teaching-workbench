@@ -1,0 +1,91 @@
+{
+  "studyTime": {
+    "records": []
+  },
+  "settings": {
+    "moduleOrder": [
+      "dashboard",
+      "todo",
+      "calendar",
+      "countdown",
+      "schedule",
+      "lessonPrep",
+      "studentHours",
+      "grades",
+      "billing",
+      "feedback",
+      "scoreCalc",
+      "materials",
+      "examBank",
+      "errorBoard",
+      "statistics",
+      "aiAssistant",
+      "personalize"
+    ],
+    "hiddenModules": [],
+    "pomodoroWorkMin": 25,
+    "pomodoroBreakMin": 5,
+    "aiRole": "ta"
+  },
+  "calendar": {
+    "events": []
+  },
+  "personalization": {
+    "icons": {
+      "dashboard": "🏠",
+      "todo": "✅",
+      "calendar": "📅",
+      "countdown": "⏰",
+      "schedule": "📋",
+      "lessonPrep": "📝",
+      "studentHours": "📊",
+      "grades": "📈",
+      "feedback": "💬",
+      "scoreCalc": "🧮",
+      "materials": "📁",
+      "examBank": "📑",
+      "errorBoard": "❌",
+      "statistics": "⏱️",
+      "aiAssistant": "🤖",
+      "billing": "💰",
+      "personalize": "🎨"
+    },
+    "background": {
+      "type": "color",
+      "color": "#F5F3F0",
+      "gradient": "linear-gradient(135deg, #F5F3F0 0%, #EDE9E4 100%)",
+      "image": "",
+      "overlayOpacity": 0
+    }
+  },
+  "aiChats": {
+    "ta": [],
+    "prep": []
+  },
+  "scheduleSettings": {
+    "subjectColors": {
+      "数学": "#D4E4D0",
+      "物理": "#C8D6E0",
+      "化学": "#D8D0E8",
+      "英语": "#E8D4C0",
+      "语文": "#D8E8D0",
+      "生物": "#E0D8C8",
+      "历史": "#D0D4DC",
+      "政治": "#E8D8D0",
+      "地理": "#C8D8D8",
+      "科学": "#DCE4D0",
+      "其他": "#DCD8D4"
+    },
+    "themePrimary": "#9BA88B",
+    "themeAccent": "#C4B8A8",
+    "themeBg": "#F5F3F0",
+    "themeCard": "#FFFFFF",
+    "themeText": "#4A4A4A"
+  },
+  "scoreCalc": {
+    "scores": {},
+    "targetSchool": "",
+    "cutoffScores": []
+  },
+  "updatedAt": 1785405604290
+}
