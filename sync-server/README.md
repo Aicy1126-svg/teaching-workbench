@@ -44,3 +44,4 @@ node server.js
 - 账号与同步数据存于 `sync-server/data/`（JSON 文件）
 - 备课文档（PDF/Word）与手写备课图存于浏览器 **IndexedDB（本机）**，不随账号上传
 - 排课、学生、便利贴等文本数据随账号云同步
+
