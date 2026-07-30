@@ -83,12 +83,8 @@ async function doSyncLogin() {
       Toast.show('⚠️ 登录成功但同步失败: ' + (r.error || '未知'), 'error');
     }
   } catch (e) {
-    let msg;
-    if (e && e.message && /fetch|network|Failed|ERR_/i.test(e.message)) {
-      msg = '⚠️ 无法连接云端，请检查网络是否正常';
-    } else {
-      msg = '❌ ' + esc(e.message || '连接失败');
-    }
+    console.error('[Login] 登录/注册失败:', e);
+    let msg = '❌ ' + esc(e.message || '连接失败');
     msgEl.innerHTML = msg;
   }
 }
