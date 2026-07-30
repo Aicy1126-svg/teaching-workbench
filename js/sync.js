@@ -1,16 +1,15 @@
 /**
- * sync.js - 跨设备云同步客户端（Supabase 版）
- * 直接连接 Supabase REST API，无需中间服务器
+ * sync.js - 跨设备云同步客户端（GitHub 仓库文件版）
+ * 用 GitHub Contents API 读写仓库里的 data/<用户名>.json
  * 支持账号登录、数据推送/拉取、自动同步
  */
 
-const SUPABASE_URL = 'https://znbwuxnn1zdxvgrrgkb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpuYnd1bXhubml6ZHZ4Z3JyZ2tiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzOTk4NTksImV4cCI6MjEwMDk3NTg1OX0.YfnVj_RPzJcSUrV57toBJ2_alGkTie7yOlxk47PmQak';
+const GITHUB_OWNER = 'Aicy1126-svg';
+const GITHUB_REPO = 'teaching-workbench';
+const GITHUB_API = 'https://api.github.com';
 
 const Sync = {
-  serverUrl: SUPABASE_URL,
-  anonKey: SUPABASE_ANON_KEY,
-  token: localStorage.getItem('sync_token') || null,
+  token: localStorage.getItem('github_token') || null,
   username: localStorage.getItem('sync_username') || null,
   lastSyncAt: parseInt(localStorage.getItem('sync_last_at') || '0'),
   _debounceTimer: null,
@@ -26,11 +25,9 @@ const Sync = {
     this.token = token;
     this.username = username;
     if (token) {
-      localStorage.setItem('sync_token', token);
       localStorage.setItem('sync_username', username);
       this._startAutoPull();
     } else {
-      localStorage.removeItem('sync_token');
       localStorage.removeItem('sync_username');
       this._stopAutoPull();
       this.lastSyncAt = 0;
@@ -55,34 +52,31 @@ const Sync = {
 
   async _pullOnly() {
     try {
-      const result = await this._fetchRow(this.username);
-      if (result && result.updated_at && result.updated_at > this.lastSyncAt) {
+      const result = await this._fetchData();
+      if (result && result.updatedAt && result.updatedAt > this.lastSyncAt) {
         this.applyRemoteData(result.data);
-        this.lastSyncAt = result.updated_at;
-        localStorage.setItem('sync_last_at', String(result.updated_at));
+        this.lastSyncAt = result.updatedAt;
+        localStorage.setItem('sync_last_at', String(result.updatedAt));
         this._lastResult = { ok: true, time: Date.now(), error: '', pulled: true };
         this._updateStatus('ok');
         setTimeout(() => location.reload(), 400);
       }
     } catch (e) {
-      if (this._lastResult.ok) {
-        this._lastResult.error = e.message;
-      }
+      if (this._lastResult.ok) this._lastResult.error = e.message;
     }
   },
 
-  // Supabase REST API 请求封装
-  async _supabaseRequest(path, method = 'GET', body = null) {
+  async _githubRequest(path, method = 'GET', body = null) {
     const headers = {
+      'Authorization': 'Bearer ' + GITHUB_TOKEN,
+      'Accept': 'application/vnd.github+json',
       'Content-Type': 'application/json',
-      'apikey': this.anonKey,
-      'Authorization': 'Bearer ' + this.anonKey,
-      'Prefer': 'return=representation',
+      'X-GitHub-Api-Version': '2022-11-28',
     };
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), 20000);
     try {
-      const res = await fetch(SUPABASE_URL + path, {
+      const res = await fetch(GITHUB_API + path, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -92,73 +86,62 @@ const Sync = {
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        throw new Error('Supabase 错误 (' + res.status + '): ' + errText);
+        throw new Error('GitHub 错误 (' + res.status + '): ' + errText.slice(0, 200));
       }
-      const data = await res.json().catch(() => null);
-      return data;
+      return await res.json().catch(() => null);
     } catch (e) {
-      if (e.name === 'AbortError') {
-        throw new Error('连接超时，请检查网络');
-      }
-      console.error('[Supabase] 请求失败:', e.message, path);
+      if (e.name === 'AbortError') throw new Error('连接超时，请检查网络');
       throw e;
     } finally {
       clearTimeout(timer);
     }
   },
 
-  async _fetchRow(username) {
-    const data = await this._supabaseRequest(
-      '/rest/v1/user_data?username=eq.' + encodeURIComponent(username) + '&select=*',
-      'GET'
-    );
-    return data && data.length ? data[0] : null;
+  _dataPath() {
+    return '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/data/' + encodeURIComponent(this.username) + '.json';
   },
 
-  async _upsertRow(username, payload) {
-    return this._supabaseRequest('/rest/v1/user_data', 'POST', {
-      username,
-      data: payload,
-      updated_at: Date.now(),
-    });
-  },
-
-  async _updateRow(username, payload) {
-    return this._supabaseRequest(
-      '/rest/v1/user_data?username=eq.' + encodeURIComponent(username),
-      'PATCH',
-      { data: payload, updated_at: Date.now() }
-    );
-  },
-
-  // 账号登录：用户名+密码，密码用简单哈希存储（纯前端方案）
-  async register(username, password) {
-    // 简单哈希（非加密，仅用于本地校验）
-    const pwdHash = btoa(unescape(encodeURIComponent(username + ':' + password)));
-    // 检查用户是否存在
-    const existing = await this._supabaseRequest(
-      '/rest/v1/user_data?username=eq.' + encodeURIComponent(username) + '&select=username',
-      'GET'
-    );
-    if (existing && existing.length) {
-      throw new Error('用户名已存在');
+  async _fetchData() {
+    try {
+      const res = await this._githubRequest(this._dataPath(), 'GET');
+      if (res && res.content) {
+        const json = JSON.parse(atob(res.content.replace(/\s/g, '')));
+        return { data: json.data || {}, updatedAt: json.updatedAt || 0, sha: res.sha };
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('404')) return null;
+      throw e;
     }
+    return null;
+  },
+
+  async _saveData(payload) {
+    const existing = await this._fetchData().catch(() => null);
+    const body = {
+      message: 'sync: update ' + this.username + ' data',
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2)))),
+      branch: 'main',
+    };
+    if (existing && existing.sha) body.sha = existing.sha;
+    return this._githubRequest(this._dataPath(), 'PUT', body);
+  },
+
+  async register(username, password) {
+    const pwdHash = btoa(unescape(encodeURIComponent(username + ':' + password)));
+    const existing = await this._fetchData().catch(() => null);
+    if (existing) throw new Error('用户名已存在');
     const token = btoa(unescape(encodeURIComponent(username + ':' + Date.now())));
-    await this._upsertRow(username, { _pwdHash: pwdHash, accounts: {} });
+    await this._saveData({ _pwdHash: pwdHash, accounts: {}, updatedAt: Date.now() });
     this._saveAuth(token, username);
     return { token, username };
   },
 
   async login(username, password) {
     const pwdHash = btoa(unescape(encodeURIComponent(username + ':' + password)));
-    const row = await this._fetchRow(username);
-    if (!row) {
-      throw new Error('用户不存在，请先注册');
-    }
+    const row = await this._fetchData();
+    if (!row) throw new Error('用户不存在，请先注册');
     const storedHash = (row.data && row.data._pwdHash) || '';
-    if (storedHash !== pwdHash) {
-      throw new Error('密码错误');
-    }
+    if (storedHash !== pwdHash) throw new Error('密码错误');
     const token = btoa(unescape(encodeURIComponent(username + ':' + Date.now())));
     this._saveAuth(token, username);
     return { token, username };
@@ -186,26 +169,19 @@ const Sync = {
 
   applyRemoteData(remoteData) {
     if (!remoteData) return;
-    // 去掉内部字段
     const cleanData = { ...remoteData };
     delete cleanData._pwdHash;
     const STORAGE_PREFIX = 'teaching_workbench_';
     const keys = Object.keys(cleanData);
-    console.log('[Sync] 应用远程数据，共 ' + keys.length + ' 个键:', keys.join(', '));
     keys.forEach(key => {
       const fullKey = STORAGE_PREFIX + key;
       const remoteVal = cleanData[key];
       try {
         const localRaw = localStorage.getItem(fullKey);
-        if (localRaw != null && Sync._isEmptyData(remoteVal) && !Sync._isEmptyData(localRaw)) {
-          console.warn('[Sync] 跳过空覆盖：' + key + '（保留本地数据）');
-          return;
-        }
+        if (localRaw != null && Sync._isEmptyData(remoteVal) && !Sync._isEmptyData(localRaw)) return;
       } catch (e) {}
       try {
-        localStorage.setItem(fullKey, typeof remoteVal === 'string'
-          ? remoteVal
-          : JSON.stringify(remoteVal));
+        localStorage.setItem(fullKey, typeof remoteVal === 'string' ? remoteVal : JSON.stringify(remoteVal));
       } catch (e) { console.warn('同步写入失败:', key, e); }
     });
   },
@@ -224,18 +200,18 @@ const Sync = {
   },
 
   async pull() {
-    const result = await this._fetchRow(this.username);
+    const result = await this._fetchData();
     if (!result) return false;
-    const remote = (result.data && Object.keys(result.data).length > 1) ? result.data : {};
+    const remote = result.data || {};
     const local = this.collectLocalData();
     const localMissing = (k) => !local[k] || this._isEmptyData(local[k]);
     const remoteHas = (k) => remote[k] && !this._isEmptyData(remote[k]);
     const needForce = (localMissing('schedule') && remoteHas('schedule')) ||
                       (localMissing('students') && remoteHas('students'));
-    if (result.updated_at && (result.updated_at > this.lastSyncAt || needForce)) {
+    if (result.updatedAt && (result.updatedAt > this.lastSyncAt || needForce)) {
       this.applyRemoteData(remote);
-      this.lastSyncAt = result.updated_at;
-      localStorage.setItem('sync_last_at', String(result.updated_at));
+      this.lastSyncAt = result.updatedAt;
+      localStorage.setItem('sync_last_at', String(result.updatedAt));
       return true;
     }
     return false;
@@ -245,24 +221,15 @@ const Sync = {
     const localData = this.collectLocalData();
     let merged = localData;
     try {
-      const remote = await this._fetchRow(this.username);
+      const remote = await this._fetchData();
       const remoteData = remote ? (remote.data || {}) : {};
       merged = this._mergeData(localData, remoteData);
+      if (remoteData._pwdHash) merged._pwdHash = remoteData._pwdHash;
     } catch (e) {}
-    // 保留密码哈希
-    const remote = await this._fetchRow(this.username);
-    if (remote && remote.data && remote.data._pwdHash) {
-      merged._pwdHash = remote.data._pwdHash;
-    }
-    try {
-      await this._updateRow(this.username, merged);
-    } catch (e) {
-      // 可能行不存在，尝试 insert
-      await this._upsertRow(this.username, merged);
-    }
-    const now = Date.now();
-    this.lastSyncAt = now;
-    localStorage.setItem('sync_last_at', String(now));
+    merged.updatedAt = Date.now();
+    await this._saveData(merged);
+    this.lastSyncAt = merged.updatedAt;
+    localStorage.setItem('sync_last_at', String(merged.updatedAt));
   },
 
   _mergeData(local, server) {
@@ -280,10 +247,10 @@ const Sync = {
   },
 
   async forceRestore() {
-    const result = await this._fetchRow(this.username);
+    const result = await this._fetchData();
     if (result) {
       this.applyRemoteData(result.data);
-      this.lastSyncAt = result.updated_at || Date.now();
+      this.lastSyncAt = result.updatedAt || Date.now();
       localStorage.setItem('sync_last_at', String(this.lastSyncAt));
     }
     this._lastResult = { ok: true, time: Date.now(), error: '', pulled: true };
@@ -304,14 +271,11 @@ const Sync = {
       this._lastResult = { ok: true, time: now, error: '', pulled: !!pulled };
       this._updateStatus('ok');
       const changed = pulled;
-      if (opts.reload !== false && changed) {
-        setTimeout(() => location.reload(), 600);
-      }
+      if (opts.reload !== false && changed) setTimeout(() => location.reload(), 600);
       return { ok: true, pulled };
     } catch (e) {
       this._updateStatus('error');
       this._lastResult = { ok: false, time: Date.now(), error: e.message || '未知错误', pulled: false };
-      console.error('[Sync] 同步失败:', e.message);
       return { ok: false, error: e.message };
     } finally {
       this._syncing = false;
@@ -321,19 +285,13 @@ const Sync = {
   scheduleSync() {
     if (!this.isLoggedIn()) return;
     clearTimeout(this._debounceTimer);
-    this._debounceTimer = setTimeout(() => {
-      this.syncNow({ reload: false });
-    }, 3000);
+    this._debounceTimer = setTimeout(() => this.syncNow({ reload: false }), 3000);
   },
 
   getSyncInfo() {
-    const fmt = (ts) => {
-      if (!ts) return '从未';
-      const d = new Date(ts);
-      return d.toLocaleString('zh-CN');
-    };
+    const fmt = (ts) => ts ? new Date(ts).toLocaleString('zh-CN') : '从未';
     return {
-      serverUrl: 'Supabase (云端)',
+      serverUrl: 'GitHub 仓库 (云端)',
       username: this.username || '(未登录)',
       loggedIn: this.isLoggedIn(),
       lastSyncAt: fmt(this.lastSyncAt),
@@ -361,15 +319,12 @@ const Sync = {
   },
 
   _formatStatusTitle(state) {
-    const t = this._lastResult.time
-      ? new Date(this._lastResult.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      : '';
+    const t = this._lastResult.time ? new Date(this._lastResult.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
     if (state === 'ok') return t ? '已同步 ' + t : '已同步';
     return '同步失败: ' + (this._lastResult.error || '未知错误');
   },
 };
 
-// 包装 DB.set 触发自动同步
 (function patchDBSet() {
   const origSet = DB.set.bind(DB);
   DB.set = function (key, value) {
@@ -379,7 +334,6 @@ const Sync = {
   };
 })();
 
-// 切回页面时立即拉取
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   if (!Sync.isLoggedIn() || Sync._syncing) return;
