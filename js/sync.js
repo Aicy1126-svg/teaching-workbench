@@ -87,6 +87,8 @@ const Sync = {
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
+        cache: 'no-store',
+        mode: 'cors',
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
