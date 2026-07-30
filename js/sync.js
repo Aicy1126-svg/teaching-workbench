@@ -98,6 +98,7 @@ const Sync = {
       if (e.name === 'AbortError') {
         throw new Error('连接超时，请检查网络');
       }
+      console.error('[Supabase] 请求失败:', e.message, path);
       throw e;
     } finally {
       clearTimeout(timer);
