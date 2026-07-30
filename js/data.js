@@ -400,6 +400,9 @@ function applyPersonalization() {
   if (launchTitle) launchTitle.textContent = username + '的工作台';
   // 更新页面 title
   document.title = username + '的工作台';
+  // 更新首页总览副标题
+  const subtitleEl = document.querySelector('.module-subtitle');
+  if (subtitleEl) subtitleEl.textContent = username + '，欢迎回来';
 
   // 更新背景
   if (settings.background) {
