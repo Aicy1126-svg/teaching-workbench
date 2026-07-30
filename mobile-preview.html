@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aicy的工作台 - 手机端预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .phone-frame {
+    width: 390px;
+    height: 844px;
+    background: #1a1a2e;
+    border-radius: 40px;
+    padding: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 2px #333, inset 0 0 0 2px #444;
+    position: relative;
+  }
+  .phone-notch {
+    width: 120px;
+    height: 28px;
+    background: #1a1a2e;
+    border-radius: 0 0 18px 18px;
+    margin: 0 auto 8px;
+    position: relative;
+    z-index: 10;
+  }
+  .phone-screen {
+    width: 100%;
+    height: calc(100% - 36px);
+    border-radius: 28px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .phone-screen iframe {
+    width: 390px;
+    height: 844px;
+    border: none;
+    transform: scale(0.938);
+    transform-origin: top left;
+    width: 416px;
+  }
+  .label {
+    color: rgba(255,255,255,0.7);
+    text-align: center;
+    margin-top: 16px;
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+  @media (max-width: 420px) {
+    .phone-frame {
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
+    }
+    .phone-notch { display: none; }
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+    }
+    .phone-screen iframe {
+      width: 100vw;
+      height: 100vh;
+      transform: none;
+    }
+    .label { display: none; }
+  }
+</style>
+</head>
+<body>
+<div style="text-align:center;">
+  <div class="phone-frame">
+    <div class="phone-notch"></div>
+    <div class="phone-screen">
+      <iframe src="http://localhost:8899"></iframe>
+    </div>
+  </div>
+  <div class="label">iPhone 14 Pro 尺寸 · 手机端预览</div>
+</div>
+</body>
+</html>

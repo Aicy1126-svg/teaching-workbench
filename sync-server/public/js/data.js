@@ -358,7 +358,7 @@ function saveData(key, data) {
 }
 
 /**
- * 应用个性化设置 - 更新图标和背景
+ * 应用个性化设置 - 更新图标、主题、头像、水印
  */
 function applyPersonalization() {
   const settings = getData('personalization');
@@ -374,11 +374,37 @@ function applyPersonalization() {
     });
   }
 
+  // 更新主题颜色
+  applyTheme(settings.theme || 'blue');
+
+  // 更新头像
+  const avatarBtn = document.getElementById('avatarBtn');
+  if (avatarBtn && settings.avatar) {
+    if (settings.avatar.startsWith('data:')) {
+      avatarBtn.innerHTML = '<img src="' + settings.avatar + '" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+      avatarBtn.style.fontSize = '';
+    } else {
+      avatarBtn.innerHTML = settings.avatar;
+      avatarBtn.style.fontSize = settings.avatar.length > 2 ? '14px' : '18px';
+    }
+  }
+
+  // 更新水印/标题（用用户名）
+  const username = localStorage.getItem('sync_username') || 'Aicy';
+  const titleEl = document.getElementById('topbarTitle');
+  if (titleEl) {
+    titleEl.textContent = username + '的工作台';
+  }
+  // 更新 launch screen 标题
+  const launchTitle = document.querySelector('.launch-title');
+  if (launchTitle) launchTitle.textContent = username + '的工作台';
+  // 更新页面 title
+  document.title = username + '的工作台';
+
   // 更新背景
   if (settings.background) {
     const bg = settings.background;
     const appEl = document.getElementById('app') || document.body;
-    // 清除旧的背景样式
     const oldBg = document.getElementById('customBgLayer');
     if (oldBg) oldBg.remove();
 
@@ -390,7 +416,6 @@ function applyPersonalization() {
       appEl.style.backgroundImage = bg.gradient;
     } else if (bg.type === 'image' && bg.image) {
       appEl.style.background = bg.color;
-      // 创建背景图层
       const layer = document.createElement('div');
       layer.id = 'customBgLayer';
       layer.style.cssText = `
@@ -405,6 +430,82 @@ function applyPersonalization() {
       document.body.prepend(layer);
     }
   }
+}
+
+/**
+ * 应用主题颜色到 CSS 变量
+ */
+function applyTheme(themeId) {
+  const root = document.documentElement;
+  const themes = {
+    blue: {
+      bgGradient: 'linear-gradient(160deg, #E8F0F8 0%, #D6E4F2 50%, #C4D8EC 100%)',
+      bgMain: '#E8F0F8',
+      accent: '#3182CE', accentDark: '#2B6CB0',
+      accentLight: 'rgba(49,130,206,0.12)', accentText: '#1A56DB',
+      textPrimary: '#1A365D', textSecondary: '#5A7A9A', textMuted: '#8AAAC8',
+      glassBg: 'rgba(255,255,255,0.45)', glassBorder: 'rgba(255,255,255,0.5)',
+      glassCard: 'rgba(255,255,255,0.5)', glassHover: 'rgba(255,255,255,0.6)',
+      sidebarBg: 'rgba(255,255,255,0.35)', topbarBg: 'rgba(255,255,255,0.35)'
+    },
+    mint: {
+      bgGradient: 'linear-gradient(160deg, #E8F5EC 0%, #D4EDDA 50%, #C3E6CB 100%)',
+      bgMain: '#E8F5EC',
+      accent: '#38A169', accentDark: '#2F855A',
+      accentLight: 'rgba(56,161,105,0.12)', accentText: '#276749',
+      textPrimary: '#1A3D2A', textSecondary: '#5A7A6A', textMuted: '#8AAA9A',
+      glassBg: 'rgba(255,255,255,0.45)', glassBorder: 'rgba(255,255,255,0.5)',
+      glassCard: 'rgba(255,255,255,0.5)', glassHover: 'rgba(255,255,255,0.6)',
+      sidebarBg: 'rgba(255,255,255,0.35)', topbarBg: 'rgba(255,255,255,0.35)'
+    },
+    lavender: {
+      bgGradient: 'linear-gradient(160deg, #F0ECF8 0%, #E4DCF0 50%, #D8CCE8 100%)',
+      bgMain: '#F0ECF8',
+      accent: '#805AD5', accentDark: '#6B46C1',
+      accentLight: 'rgba(128,90,213,0.12)', accentText: '#553C9A',
+      textPrimary: '#2D1B4E', textSecondary: '#6A5A8A', textMuted: '#9A8AAA',
+      glassBg: 'rgba(255,255,255,0.45)', glassBorder: 'rgba(255,255,255,0.5)',
+      glassCard: 'rgba(255,255,255,0.5)', glassHover: 'rgba(255,255,255,0.6)',
+      sidebarBg: 'rgba(255,255,255,0.35)', topbarBg: 'rgba(255,255,255,0.35)'
+    },
+    warm: {
+      bgGradient: 'linear-gradient(160deg, #F8F2E8 0%, #F0E4D0 50%, #E8D8C0 100%)',
+      bgMain: '#F8F2E8',
+      accent: '#D69E2E', accentDark: '#975A16',
+      accentLight: 'rgba(214,158,46,0.12)', accentText: '#744210',
+      textPrimary: '#4A3520', textSecondary: '#7A6A5A', textMuted: '#AA9A8A',
+      glassBg: 'rgba(255,255,255,0.45)', glassBorder: 'rgba(255,255,255,0.5)',
+      glassCard: 'rgba(255,255,255,0.5)', glassHover: 'rgba(255,255,255,0.6)',
+      sidebarBg: 'rgba(255,255,255,0.35)', topbarBg: 'rgba(255,255,255,0.35)'
+    },
+    dark: {
+      bgGradient: 'linear-gradient(160deg, #1A1D24 0%, #22252E 50%, #2A2D38 100%)',
+      bgMain: '#1A1D24',
+      accent: '#63B3ED', accentDark: '#4299E1',
+      accentLight: 'rgba(99,179,237,0.15)', accentText: '#90CDF4',
+      textPrimary: '#E2E8F0', textSecondary: '#A0AEC0', textMuted: '#718096',
+      glassBg: 'rgba(255,255,255,0.08)', glassBorder: 'rgba(255,255,255,0.1)',
+      glassCard: 'rgba(255,255,255,0.08)', glassHover: 'rgba(255,255,255,0.12)',
+      sidebarBg: 'rgba(255,255,255,0.05)', topbarBg: 'rgba(255,255,255,0.06)'
+    }
+  };
+
+  const t = themes[themeId] || themes.blue;
+  root.style.setProperty('--theme-bg-gradient', t.bgGradient);
+  root.style.setProperty('--theme-bg-main', t.bgMain);
+  root.style.setProperty('--theme-accent', t.accent);
+  root.style.setProperty('--theme-accent-dark', t.accentDark);
+  root.style.setProperty('--theme-accent-light', t.accentLight);
+  root.style.setProperty('--theme-accent-text', t.accentText);
+  root.style.setProperty('--theme-text-primary', t.textPrimary);
+  root.style.setProperty('--theme-text-secondary', t.textSecondary);
+  root.style.setProperty('--theme-text-muted', t.textMuted);
+  root.style.setProperty('--theme-glass-bg', t.glassBg);
+  root.style.setProperty('--theme-glass-border', t.glassBorder);
+  root.style.setProperty('--theme-glass-card', t.glassCard);
+  root.style.setProperty('--theme-glass-hover', t.glassHover);
+  root.style.setProperty('--theme-sidebar-bg', t.sidebarBg);
+  root.style.setProperty('--theme-topbar-bg', t.topbarBg);
 }
 
 /**

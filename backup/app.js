@@ -1544,7 +1544,6 @@ function renderStudentScheduleView(students, weekSlots, weekStart) {
           const addBar = '<div style="text-align:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
             + `<button class="btn btn-sm btn-secondary" onclick="addStudentExtraSlot('${selected.id}','${esc(selected.name)}')">➕ 加其他课程</button>`
             + `<button class="btn btn-sm btn-primary" onclick="exportScheduleCanvas('parent', '${weekStart}', '${selected.id}')">📥 导出图片</button>`
-            + `<button class="btn btn-sm btn-secondary copy-btn" onclick='copyToClipboard(${JSON.stringify(shareText)});this.classList.add("copied");setTimeout(()=>this.classList.remove("copied"),1500)'>📋 复制文本</button>`
             + '</div>';
 
           if (stSlots.length === 0 && stExtras.length === 0) {

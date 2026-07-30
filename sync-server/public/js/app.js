@@ -326,6 +326,8 @@ function switchModule(name) {
     }
     // 绑定模块内事件
     bindModuleEvents(name);
+    // 个性化设置：绑定头像上传
+    if (name === 'personalize') bindAvatarUpload();
   } else {
     container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🚧</div><div class="empty-state-text">模块开发中...</div></div>`;
   }
@@ -630,7 +632,7 @@ Modules.dashboard = function() {
     <div class="module-header">
       <div>
         <div class="module-title">首页总览</div>
-        <div class="module-subtitle">${DB.formatDate(new Date(), 'YYYY年MM月DD日')} · 欢迎回来</div>
+        <div class="module-subtitle">${localStorage.getItem('sync_username') || 'Aicy'}，欢迎回来</div>
       </div>
     </div>
 
@@ -1542,6 +1544,7 @@ function renderStudentScheduleView(students, weekSlots, weekStart) {
           const addBar = '<div style="text-align:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
             + `<button class="btn btn-sm btn-secondary" onclick="addStudentExtraSlot('${selected.id}','${esc(selected.name)}')">➕ 加其他课程</button>`
             + `<button class="btn btn-sm btn-primary" onclick="exportScheduleCanvas('parent', '${weekStart}', '${selected.id}')">📥 导出图片</button>`
+            + `<button class="btn btn-sm btn-secondary copy-btn" onclick='copyToClipboard(${JSON.stringify(shareText)});this.classList.add("copied");setTimeout(()=>this.classList.remove("copied"),1500)'>📋 复制文本</button>`
             + '</div>';
 
           if (stSlots.length === 0 && stExtras.length === 0) {
@@ -5900,6 +5903,52 @@ Modules.personalize = function() {
       </div>
     </div>
 
+    <!-- 主题颜色 -->
+    <div class="card mb-4">
+      <div class="card-title">🎨 主题颜色</div>
+      <div class="text-sm text-secondary mb-3">选择主题颜色，侧栏和顶栏也会同步变化</div>
+      <div class="theme-swatch-grid" style="display:flex;gap:12px;flex-wrap:wrap;">
+        ${[
+          { id:'blue', name:'天蓝', colors:'#C4D8EC,#3182CE', style:'background:linear-gradient(135deg,#E8F0F8,#C4D8EC)' },
+          { id:'mint', name:'薄荷绿', colors:'#C3E6CB,#38A169', style:'background:linear-gradient(135deg,#E8F5EC,#C3E6CB)' },
+          { id:'lavender', name:'薰衣草', colors:'#D8CCE8,#805AD5', style:'background:linear-gradient(135deg,#F0ECF8,#D8CCE8)' },
+          { id:'warm', name:'暖橙', colors:'#E8D8C0,#D69E2E', style:'background:linear-gradient(135deg,#F8F2E8,#E8D8C0)' },
+          { id:'dark', name:'深色', colors:'#2A2D38,#63B3ED', style:'background:linear-gradient(135deg,#1A1D24,#2A2D38)' },
+        ].map(t => `
+          <button class="theme-swatch ${(settings.theme||'blue')===t.id?'active':''}"
+            style="${t.style};width:72px;height:72px;border-radius:18px;border:3px solid ${(settings.theme||'blue')===t.id?'var(--theme-accent)':'rgba(255,255,255,0.4)'};cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.08);"
+            onclick="pickTheme('${t.id}')" title="${t.name}">
+          </button>
+        `).join('')}
+      </div>
+      <div class="text-xs text-secondary mt-2">当前：<span id="themeLabel">${({blue:'天蓝',mint:'薄荷绿',lavender:'薰衣草',warm:'暖橙',dark:'深色'})[settings.theme||'blue']}</span></div>
+    </div>
+
+    <!-- 头像设置 -->
+    <div class="card mb-4">
+      <div class="card-title">👤 头像设置</div>
+      <div class="text-sm text-secondary mb-3">选择预设头像或上传自定义图片</div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        ${['A','📚','🌟','🎓','🏆','💡'].map(a => `
+          <button class="avatar-pick ${(!settings.avatar||settings.avatar===a)?'active':''}"
+            style="width:48px;height:48px;border-radius:50%;border:3px solid ${(!settings.avatar||settings.avatar===a)?'var(--theme-accent)':'rgba(0,0,0,0.08)'};cursor:pointer;font-size:22px;display:flex;align-items:center;justify-content:center;background:var(--theme-glass-hover);transition:all 0.2s;"
+            onclick="pickAvatar('${a}')">${a}</button>
+        `).join('')}
+      </div>
+      <div class="avatar-upload-inline mt-3">
+        <div class="text-xs text-secondary mb-2">自定义图片上传：</div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <input type="file" id="avatarUploadInline" accept="image/*" style="display:none;">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('avatarUploadInline').click()">📷 选择图片</button>
+          <div id="avatarUploadPreview" style="width:48px;height:48px;border-radius:50%;overflow:hidden;border:2px solid var(--theme-glass-border);display:flex;align-items:center;justify-content:center;background:var(--theme-glass-hover);">
+            ${settings.avatar && settings.avatar.startsWith('data:') ? '<img src="'+settings.avatar+'" alt="自定义头像" style="width:100%;height:100%;object-fit:cover;">' : '<span style="font-size:18px;color:var(--text-light);">📷</span>'}
+          </div>
+          ${settings.avatar && settings.avatar.startsWith('data:') ? '<button class="btn btn-sm" style="color:var(--color-danger);" onclick="resetCustomAvatar()">移除自定义图片</button>' : ''}
+        </div>
+        <div class="text-xs text-secondary mt-1">支持 JPG/PNG，建议 200×200 正方形，不超过 2MB</div>
+      </div>
+    </div>
+
     <!-- 导航图标设置 -->
     <div class="card mb-4">
       <div class="card-title">🖼️ 导航图标</div>
@@ -6134,6 +6183,9 @@ function resetAllPersonalization() {
 // 保存个性化设置（从当前输入框读取）
 function savePersonalization() {
   const settings = getData('personalization');
+  // 保留已有的 theme 和 avatar 设置
+  const existingTheme = settings.theme;
+  const existingAvatar = settings.avatar;
   // 读取所有图标输入
   document.querySelectorAll('.icon-input').forEach(input => {
     const module = input.dataset.module;
@@ -6146,6 +6198,9 @@ function savePersonalization() {
     settings.background = settings.background || {};
     settings.background.gradient = gradInput.value;
   }
+  // 恢复主题和头像
+  settings.theme = existingTheme || settings.theme;
+  settings.avatar = existingAvatar || settings.avatar;
   saveData('personalization', settings);
   applyPersonalization();
   Toast.show('个性化设置已保存');
@@ -6223,6 +6278,161 @@ function resetSubjectColors() {
   saveData('scheduleSettings', ss);
   switchModule('personalize');
   Toast.show('科目颜色已重置');
+}
+
+// ==================== 主题颜色选择 ====================
+function pickTheme(themeId) {
+  const settings = getData('personalization');
+  settings.theme = themeId;
+  saveData('personalization', settings);
+  applyTheme(themeId);
+  switchModule('personalize');
+  Toast.show('主题已切换');
+}
+
+// ==================== 头像选择 ====================
+function pickAvatar(avatar) {
+  const settings = getData('personalization');
+  settings.avatar = avatar;
+  saveData('personalization', settings);
+  applyAvatarToUI(avatar);
+  // 同时更新个性化设置页面里的头像选择器
+  switchModule('personalize');
+  Toast.show('头像已更新');
+}
+
+// 把头像应用到顶栏按钮
+function applyAvatarToUI(avatar) {
+  const avatarBtn = document.getElementById('avatarBtn');
+  if (!avatarBtn) return;
+  if (avatar && avatar.startsWith('data:')) {
+    // 自定义图片
+    avatarBtn.innerHTML = '<img src="' + avatar + '" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+    avatarBtn.style.fontSize = '';
+  } else {
+    // emoji 文字头像
+    avatarBtn.innerHTML = avatar || 'A';
+    avatarBtn.style.fontSize = (avatar && avatar.length > 2) ? '14px' : '18px';
+  }
+}
+
+// 移除自定义头像，恢复为默认 emoji
+function resetCustomAvatar() {
+  pickAvatar('A');
+  // 更新上传预览区
+  var preview = document.getElementById('avatarUploadPreview');
+  if (preview) {
+    preview.innerHTML = '<span style="font-size:18px;color:var(--text-light);">📷</span>';
+  }
+  // 高亮第一个 emoji 选项
+  var picks = document.querySelectorAll('.avatar-pick');
+  picks.forEach(function(b) { b.classList.remove('active'); });
+  if (picks.length > 0) picks[0].classList.add('active');
+}
+
+// 绑定个性化设置页面的头像上传
+function bindAvatarUpload() {
+  const fileInput = document.getElementById('avatarUploadInline');
+  if (!fileInput) return;
+  // 移除旧监听器（避免重复绑定）
+  const newInput = fileInput.cloneNode(true);
+  fileInput.parentNode.replaceChild(newInput, fileInput);
+  newInput.addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { Toast.show('图片不能超过 2MB'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const imageData = e.target.result;
+      pickAvatar(imageData);
+      // 更新预览
+      const preview = document.getElementById('avatarUploadPreview');
+      if (preview) {
+        preview.innerHTML = '<img src="' + imageData + '" alt="自定义头像" style="width:100%;height:100%;object-fit:cover;">';
+      }
+      // 取消所有 emoji 选中
+      document.querySelectorAll('.avatar-pick').forEach(b => b.classList.remove('active'));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function showAvatarModal() {
+  const settings = getData('personalization');
+  const currentAvatar = settings.avatar || 'A';
+  const isImage = currentAvatar && currentAvatar.startsWith('data:');
+  const avatars = ['A','📚','🌟','🎓','🏆','💡'];
+  const overlay = document.createElement('div');
+  overlay.className = 'avatar-modal-overlay';
+  overlay.id = 'avatarModalOverlay';
+  overlay.innerHTML = [
+    '<div class="avatar-modal" style="width:360px;">',
+    '<div class="avatar-modal-title">选择头像</div>',
+    '<div class="avatar-grid">',
+    avatars.map(a => '<div class="avatar-option' + (!isImage && currentAvatar===a?' selected':'') + '" data-avatar="' + a + '" style="font-size:32px;">' + a + '</div>').join(''),
+    '</div>',
+    // 自定义上传区域
+    '<div class="avatar-upload-area">',
+    '<div class="avatar-upload-label">或上传自定义图片</div>',
+    '<div class="avatar-upload-row">',
+    '<input type="file" id="avatarFileInput" accept="image/*" style="display:none;">',
+    '<button class="btn btn-secondary btn-sm" id="avatarUploadBtn">📷 选择图片</button>',
+    '<div class="avatar-preview-upload" id="avatarPreviewUpload">',
+    isImage ? '<img src="' + currentAvatar + '" alt="当前头像" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">' : '',
+    '</div>',
+    '</div>',
+    '<div class="text-xs text-secondary mt-2" style="text-align:center;">支持 JPG/PNG，建议正方形图片</div>',
+    '</div>',
+    '<div class="avatar-modal-actions">',
+    '<button class="btn btn-primary" id="avatarConfirmBtn">确定</button>',
+    '<button class="btn btn-secondary" id="avatarCancelBtn">取消</button>',
+    '</div></div>'
+  ].join('');
+  document.body.appendChild(overlay);
+
+  let selected = isImage ? currentAvatar : currentAvatar;
+  let uploadedImage = isImage ? currentAvatar : '';
+
+  // emoji 点击
+  overlay.querySelectorAll('.avatar-option').forEach(opt => {
+    opt.addEventListener('click', function() {
+      overlay.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
+      this.classList.add('selected');
+      selected = this.dataset.avatar;
+      uploadedImage = ''; // 选 emoji 时清掉上传图
+      document.getElementById('avatarPreviewUpload').innerHTML = '';
+    });
+  });
+
+  // 上传按钮
+  const fileInput = overlay.querySelector('#avatarFileInput');
+  const previewDiv = overlay.querySelector('#avatarPreviewUpload');
+  overlay.querySelector('#avatarUploadBtn').addEventListener('click', function() {
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { Toast.show('图片不能超过 2MB'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      uploadedImage = e.target.result;
+      selected = uploadedImage;
+      previewDiv.innerHTML = '<img src="' + uploadedImage + '" alt="上传预览" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:3px solid var(--theme-accent);">';
+      // 取消 emoji 选中
+      overlay.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('avatarCancelBtn').addEventListener('click', function() { overlay.remove(); });
+  document.getElementById('avatarConfirmBtn').addEventListener('click', function() {
+    pickAvatar(selected);
+    overlay.remove();
+  });
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
 }
 
 // ==================== 启动 ====================
