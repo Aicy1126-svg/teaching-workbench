@@ -68,7 +68,7 @@ const Sync = {
 
   async _githubRequest(path, method = 'GET', body = null) {
     const headers = {
-      'Authorization': 'Bearer ' + GITHUB_TOKEN,
+      'Authorization': 'Bearer ' + this.token,
       'Accept': 'application/vnd.github+json',
       'Content-Type': 'application/json',
       'X-GitHub-Api-Version': '2022-11-28',
