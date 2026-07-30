@@ -1313,7 +1313,8 @@ canvas { max-width: 100%; }
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(4px);
   z-index: 300;
   align-items: center;
   justify-content: center;
@@ -1322,7 +1323,7 @@ canvas { max-width: 100%; }
 .modal-overlay.show { display: flex; }
 
 .modal {
-  background: var(--bg-card);
+  background: rgba(255,255,255,0.96);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   max-width: 560px;

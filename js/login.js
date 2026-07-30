@@ -74,6 +74,7 @@ async function doSyncLogin() {
     Modal.close(document.querySelector('.modal-overlay'));
     Toast.show('✅ 登录成功，正在同步数据...');
     updateSyncUI();
+    if (typeof applyPersonalization === 'function') applyPersonalization();
     const r = await Sync.syncNow();
     if (r.ok && r.pulled) {
       Toast.show('📥 已从云端同步最新数据，即将刷新...');
