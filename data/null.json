@@ -1,31 +1,7 @@
 {
-  "studyTime": {
-    "records": []
-  },
-  "settings": {
-    "moduleOrder": [
-      "dashboard",
-      "todo",
-      "calendar",
-      "countdown",
-      "schedule",
-      "lessonPrep",
-      "studentHours",
-      "grades",
-      "billing",
-      "feedback",
-      "scoreCalc",
-      "materials",
-      "examBank",
-      "errorBoard",
-      "statistics",
-      "aiAssistant",
-      "personalize"
-    ],
-    "hiddenModules": [],
-    "pomodoroWorkMin": 25,
-    "pomodoroBreakMin": 5,
-    "aiRole": "ta"
+  "aiChats": {
+    "ta": [],
+    "prep": []
   },
   "calendar": {
     "events": []
@@ -58,9 +34,10 @@
       "overlayOpacity": 0
     }
   },
-  "aiChats": {
-    "ta": [],
-    "prep": []
+  "scoreCalc": {
+    "scores": {},
+    "targetSchool": "",
+    "cutoffScores": []
   },
   "scheduleSettings": {
     "subjectColors": {
@@ -82,10 +59,33 @@
     "themeCard": "#FFFFFF",
     "themeText": "#4A4A4A"
   },
-  "scoreCalc": {
-    "scores": {},
-    "targetSchool": "",
-    "cutoffScores": []
+  "studyTime": {
+    "records": []
   },
-  "updatedAt": 1785405623690
+  "settings": {
+    "moduleOrder": [
+      "dashboard",
+      "todo",
+      "calendar",
+      "countdown",
+      "schedule",
+      "lessonPrep",
+      "studentHours",
+      "grades",
+      "billing",
+      "feedback",
+      "scoreCalc",
+      "materials",
+      "examBank",
+      "errorBoard",
+      "statistics",
+      "aiAssistant",
+      "personalize"
+    ],
+    "hiddenModules": [],
+    "pomodoroWorkMin": 25,
+    "pomodoroBreakMin": 5,
+    "aiRole": "ta"
+  },
+  "updatedAt": 1785405823282
 }
