@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="教培工作台">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#8B9A8B" media="(prefers-color-scheme: light)">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="theme-color" content="#6B7A6B" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="初高中教培老师专属AI效率工作台，支持排课备课、课消成绩、AI反馈、证书备考一体化管理。">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- App icons -->
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+
+  <title>教培备考工作台</title>
+  <link rel="stylesheet" href="css/style.css?v=202607301607">
+  <script>
+    // ===== 启动自检：杜绝"白屏打不开" =====
+    // 若带 ?nocache，先注销旧 Service Worker 再强刷，彻底绕过坏缓存
+    (function () {
+      try {
+        if (/[?&]nocache/.test(location.search) && navigator.serviceWorker) {
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            Promise.all(regs.map(r => r.unregister())).then(() => location.replace(location.pathname));
+          });
+          return;
+        }
+      } catch (e) {}
+      // 核心 JS 未在 4 秒内初始化 → 自动绕过 SW 重开，避免永久白屏
+      window.__appReady = false;
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          if (!window.__appReady) {
+            var sep = location.search ? '&' : '?';
+            location.replace(location.pathname + sep + 'nocache=1');
+          }
+        }, 4000);
+      });
+    })();
+  </script>
+</head>
+<body>
+  <!-- iOS 刘海屏状态栏背景 -->
+  <div class="ios-status-bar" aria-hidden="true"></div>
+
+  <!-- iOS PWA 启动画面：默认隐藏，仅在 PWA standalone 模式由 JS 显示 -->
+  <div id="launchScreen" class="launch-screen" aria-hidden="true" style="display:none;">
+    <div class="launch-content">
+      <div class="launch-icon">
+        <img src="icons/icon-192.png" alt="教培备考工作台" width="96" height="96">
+      </div>
+      <h1 class="launch-title">教培备考工作台</h1>
+      <p class="launch-subtitle">轻量化教学效率工具</p>
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- 顶部栏 -->
+    <header class="topbar" id="topbar">
+      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="菜单">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      </button>
+      <div class="topbar-title">
+        <button class="avatar-btn" id="avatarBtn" onclick="showAvatarModal()" title="更换头像">A</button>
+        <span class="topbar-text" id="topbarTitle">Aicy的工作台</span>
+      </div>
+      <div class="topbar-right">
+        <button class="sync-account-btn" id="syncAccountBtn" onclick="showLoginModal()">☁️ 登录同步</button>
+        <span class="sync-status-dot" id="syncStatusDot" title="未同步" style="display:none"></span>
+        <button class="icon-btn ai-toggle" id="aiToggle" aria-label="AI助手">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 3 .97 4.29L2 22l5.71-.97C9 21.64 10.46 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-1 14.5l-3-3 1.41-1.41L11 13.67l4.59-4.58L17 10.5l-6 6z"/></svg>
+          <span class="ai-badge">AI</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 侧边导航遮罩（移动端） -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- 左侧导航栏 -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">总览</div>
+        <a class="nav-item active" data-module="dashboard">
+          <span class="nav-icon">🏠</span><span class="nav-label">首页总览</span>
+        </a>
+        <a class="nav-item" data-module="todo">
+          <span class="nav-icon">✅</span><span class="nav-label">每日任务</span>
+        </a>
+        <a class="nav-item" data-module="calendar">
+          <span class="nav-icon">📅</span><span class="nav-label">日历看板</span>
+        </a>
+        <a class="nav-item" data-module="countdown">
+          <span class="nav-icon">⏰</span><span class="nav-label">考试倒计时</span>
+        </a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">教学管理</div>
+        <a class="nav-item" data-module="schedule">
+          <span class="nav-icon">📋</span><span class="nav-label">排课管理</span>
+        </a>
+        <a class="nav-item" data-module="studentManagement">
+          <span class="nav-icon">👩‍🎓</span><span class="nav-label">学生管理</span>
+        </a>
+        <a class="nav-item" data-module="lessonPrep">
+          <span class="nav-icon">📝</span><span class="nav-label">备课文档库</span>
+        </a>
+        <a class="nav-item" data-module="studentHours">
+          <span class="nav-icon">📊</span><span class="nav-label">课消台账</span>
+        </a>
+        <a class="nav-item" data-module="grades">
+          <span class="nav-icon">📈</span><span class="nav-label">成绩档案</span>
+        </a>
+        <a class="nav-item" data-module="report">
+          <span class="nav-icon">📋</span><span class="nav-label">学情报告</span>
+        </a>
+        <a class="nav-item" data-module="billing">
+          <span class="nav-icon">💰</span><span class="nav-label">课时结算</span>
+        </a>
+        <a class="nav-item" data-module="ledger">
+          <span class="nav-icon">📒</span><span class="nav-label">记账</span>
+        </a>
+        <a class="nav-item" data-module="feedback">
+          <span class="nav-icon">💬</span><span class="nav-label">课后反馈生成</span>
+        </a>
+        <a class="nav-item" data-module="scoreCalc">
+          <span class="nav-icon">🧮</span><span class="nav-label">中考分数测算</span>
+        </a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">备考 & 素材</div>
+        <a class="nav-item" data-module="materials">
+          <span class="nav-icon">📁</span><span class="nav-label">素材库</span>
+        </a>
+        <a class="nav-item" data-module="examBank">
+          <span class="nav-icon">📑</span><span class="nav-label">真题集</span>
+        </a>
+        <a class="nav-item" data-module="errorBoard">
+          <span class="nav-icon">❌</span><span class="nav-label">错题收集板</span>
+        </a>
+        <a class="nav-item" data-module="statistics">
+          <span class="nav-icon">⏱️</span><span class="nav-label">学习时长统计</span>
+        </a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">AI 助手</div>
+        <a class="nav-item" data-module="aiAssistant">
+          <span class="nav-icon">🤖</span><span class="nav-label">AI 对话助手</span>
+        </a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">其他</div>
+        <a class="nav-item" data-module="personalize">
+          <span class="nav-icon">🎨</span><span class="nav-label">个性化设置</span>
+        </a>
+      </div>
+      <div class="sidebar-footer">
+        <button class="sidebar-btn" id="exportDataBtn">📤 导出数据</button>
+        <button class="sidebar-btn" id="importDataBtn">📥 导入数据</button>
+        <input type="file" id="importFileInput" accept=".json" style="display:none">
+      </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content" id="mainContent">
+      <!-- 模块内容动态渲染 -->
+    </main>
+
+    <!-- 右侧AI侧边栏（桌面端悬浮） -->
+    <aside class="ai-panel" id="aiPanel">
+      <div class="ai-panel-header">
+        <div class="ai-panel-title">
+          <span>🤖 AI 助手</span>
+        </div>
+        <div class="ai-role-switch">
+          <button class="ai-role-btn active" data-role="ta">理科助教</button>
+          <button class="ai-role-btn" data-role="prep">备考助手</button>
+        </div>
+        <button class="icon-btn ai-close" id="aiClose" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="ai-chat-area" id="aiChatArea">
+        <div class="ai-welcome">
+          <p>👋 你好！我是你的AI助手。</p>
+          <p>选择角色后开始对话，记录会保存在工作台内。</p>
+        </div>
+      </div>
+      <div class="ai-input-area">
+        <textarea id="aiInput" placeholder="输入问题..." rows="1"></textarea>
+        <button class="ai-send-btn" id="aiSendBtn">发送</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 番茄钟浮窗 -->
+  <div class="pomodoro-float" id="pomodoroFloat" style="display:none;">
+    <div class="pomodoro-mini" id="pomodoroMini">
+      <span class="pomodoro-time" id="pomodoroTime">25:00</span>
+      <span class="pomodoro-label" id="pomodoroLabel">备课计时</span>
+      <button class="pomodoro-toggle-btn" id="pomodoroToggleBtn">▶</button>
+      <button class="pomodoro-close-btn" id="pomodoroCloseBtn">✕</button>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="js/data.js?v=202607301607"></script>
+  <script src="js/sync.js?v=202607301607"></script>
+  <script src="js/login.js?v=202607301607"></script>
+  <script src="js/app.js?v=202607301607"></script>
+  <script src="js/prep.js?v=202607301607"></script>
+</body>
+</html>
