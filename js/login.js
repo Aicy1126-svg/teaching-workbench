@@ -17,10 +17,16 @@ function esc(s) {
 
 function showLoginModal() {
   const prefill = esc(Sync.username || lastUsername() || '');
+  const tokenPrefill = localStorage.getItem('github_token') || '';
   const body = `
     <div class="text-sm text-secondary mb-3">
       🔑 输入你<strong>自己的账号和密码</strong>即可：第一次会自动<strong>注册</strong>，之后这台设备自动登录。<br>
       用<strong>同一个账号</strong>在电脑 / 手机 / 平板上登录，排课、学生、便贴等数据会自动同步到云端。
+    </div>
+    <div class="form-group">
+      <label class="form-label">GitHub 私人令牌（首次必填，用于云同步）</label>
+      <input class="input" id="githubToken" value="${esc(tokenPrefill)}" placeholder="ghp_xxxx 开头的令牌">
+      <div class="text-xs text-light mt-1">在 GitHub → Settings → Developer settings → Personal access tokens 生成，需 repo 权限。所有设备填同一个。</div>
     </div>
     <div class="form-group">
       <label class="form-label">账号（用户名）</label>
@@ -51,7 +57,16 @@ function showLoginModal() {
 async function doSyncLogin() {
   const username = document.getElementById('syncUsername').value.trim();
   const password = document.getElementById('syncPassword').value;
+  const tokenEl = document.getElementById('githubToken');
+  const token = tokenEl ? tokenEl.value.trim() : '';
   const msgEl = document.getElementById('syncMsg');
+
+  if (!token) {
+    msgEl.textContent = '请先填写 GitHub 私人令牌';
+    return;
+  }
+  localStorage.setItem('github_token', token);
+  Sync.token = token;
 
   if (!username) {
     msgEl.textContent = '请填写账号';
