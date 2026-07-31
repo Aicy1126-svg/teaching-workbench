@@ -1595,7 +1595,8 @@ canvas { max-width: 100%; }
 .grid-2 > *, .grid-3 > *, .grid-4 > *, .grid-auto > * { min-width: 0; }
 
 @media (max-width: 768px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
 }
 
 /* ========== 备课文档 ========== */

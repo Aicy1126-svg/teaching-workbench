@@ -390,7 +390,7 @@ function applyPersonalization() {
   }
 
   // 更新水印/标题（用用户名）
-  const username = localStorage.getItem('sync_username') || 'Aicy';
+  const username = localStorage.getItem('sync_username') || '用户';
   const titleEl = document.getElementById('topbarTitle');
   if (titleEl) {
     titleEl.textContent = username + '的工作台';

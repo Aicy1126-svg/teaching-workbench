@@ -637,7 +637,7 @@ Modules.dashboard = function() {
     <div class="module-header">
       <div>
         <div class="module-title">首页总览</div>
-        <div class="module-subtitle">${localStorage.getItem('sync_username') || 'Aicy'}，欢迎回来</div>
+        <div class="module-subtitle">${localStorage.getItem('sync_username') || '用户'}，欢迎回来</div>
       </div>
     </div>
 
