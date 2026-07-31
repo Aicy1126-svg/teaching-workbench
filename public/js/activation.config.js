@@ -5,7 +5,7 @@
  * 不是强加密。若需强保护，请接入服务器校验（见 README“进阶：服务端激活校验”）。
  */
 (function (root, factory) {
-  const SECRET = 'TW-LIGHTPAY-ACT-SECRET-9F3A-7C21-D47E-2026';
+  const SECRET = 'TW-Rzade8HdPvvZY0PPkdmwaaZmo9QdoC39gKS5aMlZV50tJJGN-2026';
   const cfg = { SECRET: SECRET };
   if (typeof module !== 'undefined' && module.exports) module.exports = cfg;
   if (typeof window !== 'undefined') window.ACTIVATION_CONFIG = cfg;
