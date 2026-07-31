@@ -6916,6 +6916,10 @@ function showAvatarModal() {
 
 // ==================== 启动 ====================
 document.addEventListener('DOMContentLoaded', function () {
+  // 核心脚本已成功执行（含激活页），立即标记页面就绪。
+  // 否则未激活/激活页等待期间 __appReady 恒为 false，会触发 index.html 的 4 秒自检
+  // 误判为 Service Worker 故障，进而无限跳转 ?nocache=1 → 表现为"一直刷新"。
+  window.__appReady = true;
   // 轻付费激活码门槛：未激活先弹激活页，激活后再启动应用
   if (window.Activation && !window.Activation.isActivated()) {
     window.Activation.check(init);

@@ -140,6 +140,8 @@
 
   // 全屏激活页
   function showScreen(onSuccess) {
+    // 激活页已正常渲染，标记页面就绪，避免启动自检误判为白屏而循环刷新
+    window.__appReady = true;
     const existing = document.getElementById('activationOverlay');
     if (existing) existing.parentNode.removeChild(existing);
     const ACT = window.ACTIVATION_CONFIG || {};
