@@ -637,7 +637,7 @@ Modules.dashboard = function() {
     <div class="module-header">
       <div>
         <div class="module-title">首页总览</div>
-        <div class="module-subtitle">${localStorage.getItem('sync_username') || 'Aicy'}，欢迎回来</div>
+        <div class="module-subtitle">${localStorage.getItem('sync_username') || '用户'}，欢迎回来</div>
       </div>
     </div>
 
@@ -2451,6 +2451,10 @@ function addStudent() {
       <input class="input" id="newStudentTags" placeholder="如：晚辅 重点学生 薄弱">
     </div>
     <div class="form-group">
+      <label class="form-label">学生性格</label>
+      <input class="input" id="newStudentPersonality" placeholder="如：活泼开朗 / 内向沉稳 / 思维活跃">
+    </div>
+    <div class="form-group">
       <label class="form-label">个人色板</label>
       <div class="color-swatch-grid" id="studentColorGrid">${paletteHTML}</div>
       <div class="flex items-center gap-2 mt-2">
@@ -2483,6 +2487,7 @@ function saveNewStudent() {
     parentName: document.getElementById('newStudentParent').value.trim(),
     phone: document.getElementById('newStudentPhone').value.trim(),
     notes: document.getElementById('newStudentNotes').value.trim(),
+    personality: document.getElementById('newStudentPersonality').value.trim(),
     tags: tagsInput ? tagsInput.split(/\s+/).filter(Boolean) : [],
     color: colorVal || null,
     status: 'active',
@@ -2546,6 +2551,10 @@ function editStudent(id) {
       <input class="input" id="editStudentTags" value="${esc((s.tags || []).join(' '))}" placeholder="如：晚辅 重点学生 薄弱">
     </div>
     <div class="form-group">
+      <label class="form-label">学生性格</label>
+      <input class="input" id="editStudentPersonality" value="${esc(s.personality || '')}" placeholder="如：活泼开朗 / 内向沉稳 / 思维活跃">
+    </div>
+    <div class="form-group">
       <label class="form-label">个人色板</label>
       <div class="color-swatch-grid" id="studentColorGrid">${paletteHTML}</div>
       <div class="flex items-center gap-2 mt-2">
@@ -2590,6 +2599,7 @@ function saveEditStudent(id) {
   s.phone = document.getElementById('editStudentPhone').value.trim();
   const tagsInput = document.getElementById('editStudentTags').value.trim();
   s.tags = tagsInput ? tagsInput.split(/\s+/).filter(Boolean) : [];
+  s.personality = document.getElementById('editStudentPersonality').value.trim();
   s.notes = document.getElementById('editStudentNotes').value.trim();
   const colorVal = document.getElementById('editStudentColorValue').value;
   s.color = colorVal || null;
@@ -4075,7 +4085,8 @@ function renderStudentCard(s) {
   const subjectTags = subjects.slice(0, 5).map(sub => `<span class="student-tag subject">${esc(sub)}</span>`).join('');
   // 其他标签分类
   const classTag = s.className ? `<span class="student-tag class">🎓 ${esc(s.className)}</span>` : '';
-  const statusTag = s.status === 'archived' ? `<span class="student-tag weak">已归档</span>` : `<span class="student-tag level">active</span>`;
+  const personalityTag = s.personality ? `<span class="student-tag level" title="学生性格">${esc(s.personality)}</span>` : '';
+  const archiveTag = s.status === 'archived' ? `<span class="student-tag weak">已归档</span>` : '';
   const extraTags = tags.slice(0, 3).map(t => `<span class="student-tag">${esc(t)}</span>`).join('');
 
   return `
@@ -4088,7 +4099,8 @@ function renderStudentCard(s) {
         </div>
       </div>
       <div class="student-tags">
-        ${statusTag}
+        ${personalityTag}
+        ${archiveTag}
         ${classTag}
         ${subjectTags}
         ${extraTags}
@@ -5560,8 +5572,8 @@ let matImageDataURL = null;
 function previewMatImage(input) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    Toast.show('图片过大（>2MB），建议压缩后再上传');
+  if (file.size > 8 * 1024 * 1024) {
+    Toast.show('图片过大（>8MB），建议压缩后再上传');
   }
   readFileAsDataURL(file).then(dataURL => {
     matImageDataURL = dataURL;
@@ -6333,7 +6345,7 @@ Modules.personalize = function() {
           </div>
           ${settings.avatar && settings.avatar.startsWith('data:') ? '<button class="btn btn-sm" style="color:var(--color-danger);" onclick="resetCustomAvatar()">移除自定义图片</button>' : ''}
         </div>
-        <div class="text-xs text-secondary mt-1">支持 JPG/PNG，建议 200×200 正方形，不超过 2MB</div>
+        <div class="text-xs text-secondary mt-1">支持 JPG/PNG，建议 200×200 正方形，不超过 8MB</div>
       </div>
     </div>
 
@@ -6406,6 +6418,17 @@ Modules.personalize = function() {
     </div>
 
     <div class="card">
+      <div class="card-title">💾 数据备份与迁移</div>
+      <div class="text-sm text-secondary mb-3">导出会把你所有本地数据（学生、备课、排课、结算、个性化设置等）打包成一个 JSON 文件。换电脑或重装前先导出，到新环境用「导入备份」即可一键恢复，数据不丢。</div>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn btn-primary" onclick="exportAllData()">📤 导出全部数据</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('importBackupInput').click()">📥 导入备份</button>
+        <input type="file" id="importBackupInput" accept="application/json,.json" style="display:none;" onchange="importAllData(this)">
+      </div>
+      <div class="text-xs text-secondary mt-2" id="backupHint"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">⚡ 快速重置</div>
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-secondary" onclick="resetAllIcons()">↺ 重置所有图标</button>
@@ -6417,6 +6440,74 @@ Modules.personalize = function() {
 };
 Modules.personalize.bindEvents = function() {};
 Modules.personalize.init = function() {};
+
+// ==================== 数据备份与迁移 ====================
+// 导出所有 teaching_workbench_* 前缀的本地数据为一个 JSON 文件
+function exportAllData() {
+  try {
+    const PREFIX = 'teaching_workbench_';
+    const data = {};
+    let count = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PREFIX)) {
+        try { data[key] = localStorage.getItem(key); count++; } catch (e) {}
+      }
+    }
+    // 同步登录态也一并带出，方便迁移后直接登录
+    if (localStorage.getItem('sync_token')) data['sync_token'] = localStorage.getItem('sync_token');
+    if (localStorage.getItem('sync_username')) data['sync_username'] = localStorage.getItem('sync_username');
+    const payload = {
+      app: 'teaching-workbench',
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      data
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `教学工作台-数据备份-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    const hint = document.getElementById('backupHint');
+    if (hint) hint.textContent = `✅ 已导出 ${count} 项数据（${ts}）`;
+    Toast.show(`已导出 ${count} 项数据`);
+  } catch (e) {
+    Toast.show('导出失败：' + e.message, 'error');
+  }
+}
+
+// 从 JSON 备份文件恢复数据
+function importAllData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if (!payload || !payload.data) throw new Error('备份文件格式不正确');
+      let count = 0;
+      for (const key of Object.keys(payload.data)) {
+        try { localStorage.setItem(key, payload.data[key]); count++; } catch (err) {}
+      }
+      const hint = document.getElementById('backupHint');
+      if (hint) hint.textContent = `✅ 已导入 ${count} 项数据，即将刷新页面…`;
+      Toast.show(`已导入 ${count} 项数据，正在恢复…`);
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      Toast.show('导入失败：' + err.message, 'error');
+      const hint = document.getElementById('backupHint');
+      if (hint) hint.textContent = '❌ 导入失败：' + err.message;
+    } finally {
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
 
 // 图标预览实时更新
 function updateIconPreview(module, value) {
@@ -6497,8 +6588,8 @@ function saveCustomGradient() {
 function uploadBgImage(input) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    Toast.show('图片不能超过 2MB', 'error');
+  if (file.size > 8 * 1024 * 1024) {
+    Toast.show('图片不能超过 8MB', 'error');
     return;
   }
   const reader = new FileReader();
@@ -6728,7 +6819,7 @@ function bindAvatarUpload() {
   newInput.addEventListener('change', function() {
     const file = this.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { Toast.show('图片不能超过 2MB'); return; }
+    if (file.size > 8 * 1024 * 1024) { Toast.show('图片不能超过 8MB'); return; }
     const reader = new FileReader();
     reader.onload = function(e) {
       const imageData = e.target.result;
@@ -6801,7 +6892,7 @@ function showAvatarModal() {
   fileInput.addEventListener('change', function() {
     const file = this.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { Toast.show('图片不能超过 2MB'); return; }
+    if (file.size > 8 * 1024 * 1024) { Toast.show('图片不能超过 8MB'); return; }
     const reader = new FileReader();
     reader.onload = function(e) {
       uploadedImage = e.target.result;
@@ -6824,4 +6915,11 @@ function showAvatarModal() {
 }
 
 // ==================== 启动 ====================
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function () {
+  // 轻付费激活码门槛：未激活先弹激活页，激活后再启动应用
+  if (window.Activation && !window.Activation.isActivated()) {
+    window.Activation.check(init);
+  } else {
+    init();
+  }
+});

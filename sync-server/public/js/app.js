@@ -6418,6 +6418,17 @@ Modules.personalize = function() {
     </div>
 
     <div class="card">
+      <div class="card-title">💾 数据备份与迁移</div>
+      <div class="text-sm text-secondary mb-3">导出会把你所有本地数据（学生、备课、排课、结算、个性化设置等）打包成一个 JSON 文件。换电脑或重装前先导出，到新环境用「导入备份」即可一键恢复，数据不丢。</div>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn btn-primary" onclick="exportAllData()">📤 导出全部数据</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('importBackupInput').click()">📥 导入备份</button>
+        <input type="file" id="importBackupInput" accept="application/json,.json" style="display:none;" onchange="importAllData(this)">
+      </div>
+      <div class="text-xs text-secondary mt-2" id="backupHint"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">⚡ 快速重置</div>
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-secondary" onclick="resetAllIcons()">↺ 重置所有图标</button>
@@ -6429,6 +6440,74 @@ Modules.personalize = function() {
 };
 Modules.personalize.bindEvents = function() {};
 Modules.personalize.init = function() {};
+
+// ==================== 数据备份与迁移 ====================
+// 导出所有 teaching_workbench_* 前缀的本地数据为一个 JSON 文件
+function exportAllData() {
+  try {
+    const PREFIX = 'teaching_workbench_';
+    const data = {};
+    let count = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PREFIX)) {
+        try { data[key] = localStorage.getItem(key); count++; } catch (e) {}
+      }
+    }
+    // 同步登录态也一并带出，方便迁移后直接登录
+    if (localStorage.getItem('sync_token')) data['sync_token'] = localStorage.getItem('sync_token');
+    if (localStorage.getItem('sync_username')) data['sync_username'] = localStorage.getItem('sync_username');
+    const payload = {
+      app: 'teaching-workbench',
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      data
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `教学工作台-数据备份-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    const hint = document.getElementById('backupHint');
+    if (hint) hint.textContent = `✅ 已导出 ${count} 项数据（${ts}）`;
+    Toast.show(`已导出 ${count} 项数据`);
+  } catch (e) {
+    Toast.show('导出失败：' + e.message, 'error');
+  }
+}
+
+// 从 JSON 备份文件恢复数据
+function importAllData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if (!payload || !payload.data) throw new Error('备份文件格式不正确');
+      let count = 0;
+      for (const key of Object.keys(payload.data)) {
+        try { localStorage.setItem(key, payload.data[key]); count++; } catch (err) {}
+      }
+      const hint = document.getElementById('backupHint');
+      if (hint) hint.textContent = `✅ 已导入 ${count} 项数据，即将刷新页面…`;
+      Toast.show(`已导入 ${count} 项数据，正在恢复…`);
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      Toast.show('导入失败：' + err.message, 'error');
+      const hint = document.getElementById('backupHint');
+      if (hint) hint.textContent = '❌ 导入失败：' + err.message;
+    } finally {
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
 
 // 图标预览实时更新
 function updateIconPreview(module, value) {
@@ -6836,4 +6915,11 @@ function showAvatarModal() {
 }
 
 // ==================== 启动 ====================
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function () {
+  // 轻付费激活码门槛：未激活先弹激活页，激活后再启动应用
+  if (window.Activation && !window.Activation.isActivated()) {
+    window.Activation.check(init);
+  } else {
+    init();
+  }
+});
