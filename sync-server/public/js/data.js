@@ -377,15 +377,19 @@ function applyPersonalization() {
   // 更新主题颜色
   applyTheme(settings.theme || 'blue');
 
-  // 更新头像
+  // 历史大图自动压缩，缩小同步体积（避免手机端同步超时失败）
+  if (typeof shrinkAvatarIfNeeded === 'function') shrinkAvatarIfNeeded(settings);
+
+  // 更新头像（未登录一律默认头像）
   const avatarBtn = document.getElementById('avatarBtn');
-  if (avatarBtn && settings.avatar) {
-    if (settings.avatar.startsWith('data:')) {
-      avatarBtn.innerHTML = '<img src="' + settings.avatar + '" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+  if (avatarBtn) {
+    const uiAvatar = (!Sync.isLoggedIn()) ? '👤' : (settings.avatar || 'A');
+    if (uiAvatar.startsWith('data:')) {
+      avatarBtn.innerHTML = '<img src="' + uiAvatar + '" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
       avatarBtn.style.fontSize = '';
     } else {
-      avatarBtn.innerHTML = settings.avatar;
-      avatarBtn.style.fontSize = settings.avatar.length > 2 ? '14px' : '18px';
+      avatarBtn.innerHTML = uiAvatar;
+      avatarBtn.style.fontSize = uiAvatar.length > 2 ? '14px' : '18px';
     }
   }
 

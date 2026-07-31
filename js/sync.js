@@ -24,6 +24,9 @@ const Sync = {
     if (token) {
       localStorage.setItem('sync_token', token);
       localStorage.setItem('sync_username', username);
+      // 切换账号时清空同步时间戳，强制拉取新账号的完整数据（含其头像/个性化设置）
+      this.lastSyncAt = 0;
+      localStorage.setItem('sync_last_at', '0');
       this._startAutoPull();
     } else {
       localStorage.removeItem('sync_token');
@@ -55,7 +58,7 @@ const Sync = {
     };
     if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const timer = setTimeout(() => ctrl.abort(), 45000);
     try {
       const res = await fetch(path, {
         method,

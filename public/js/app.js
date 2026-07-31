@@ -6784,6 +6784,12 @@ function pickAvatar(avatar) {
 function applyAvatarToUI(avatar) {
   const avatarBtn = document.getElementById('avatarBtn');
   if (!avatarBtn) return;
+  // 未登录时一律显示默认头像
+  if (!Sync.isLoggedIn()) {
+    avatarBtn.innerHTML = '👤';
+    avatarBtn.style.fontSize = '18px';
+    return;
+  }
   if (avatar && avatar.startsWith('data:')) {
     // 自定义图片
     avatarBtn.innerHTML = '<img src="' + avatar + '" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
@@ -6793,6 +6799,54 @@ function applyAvatarToUI(avatar) {
     avatarBtn.innerHTML = avatar || 'A';
     avatarBtn.style.fontSize = (avatar && avatar.length > 2) ? '14px' : '18px';
   }
+}
+
+// 把上传头像压缩到合适尺寸，避免原图 base64 过大撑爆同步数据导致手机端同步失败
+function compressAvatar(file, maxSize, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        let w = img.width, h = img.height;
+        if (w > h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else if (h > w && h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        try { resolve(canvas.toDataURL('image/jpeg', quality)); }
+        catch (err) { reject(err); }
+      };
+      img.onerror = function() { reject(new Error('图片解析失败')); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function() { reject(new Error('读取失败')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+// 启动时若发现已存的头像 base64 过大（历史 8MB 原图），自动压缩一遍，缩小同步体积
+function shrinkAvatarIfNeeded(settings) {
+  if (!settings || typeof settings.avatar !== 'string') return;
+  if (!settings.avatar.startsWith('data:image/')) return;
+  if (settings.avatar.length <= 60000) return; // 约 45KB 以内视为正常
+  const img = new Image();
+  img.onload = function() {
+    let w = img.width, h = img.height, maxSize = 256;
+    if (w > h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+    else if (h > w && h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const small = canvas.toDataURL('image/jpeg', 0.82);
+    const s = getData('personalization');
+    if (s) { s.avatar = small; saveData('personalization', s); }
+  };
+  img.src = settings.avatar;
 }
 
 // 移除自定义头像，恢复为默认 emoji
@@ -6820,19 +6874,17 @@ function bindAvatarUpload() {
     const file = this.files[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) { Toast.show('图片不能超过 8MB'); return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const imageData = e.target.result;
+    Toast.show('正在处理图片...');
+    compressAvatar(file, 256, 0.82).then(function(imageData) {
       pickAvatar(imageData);
-      // 更新预览
       const preview = document.getElementById('avatarUploadPreview');
       if (preview) {
         preview.innerHTML = '<img src="' + imageData + '" alt="自定义头像" style="width:100%;height:100%;object-fit:cover;">';
       }
-      // 取消所有 emoji 选中
       document.querySelectorAll('.avatar-pick').forEach(b => b.classList.remove('active'));
-    };
-    reader.readAsDataURL(file);
+    }).catch(function(err) {
+      Toast.show('头像处理失败: ' + (err && err.message || '未知错误'), 'error');
+    });
   });
 }
 
@@ -6893,15 +6945,16 @@ function showAvatarModal() {
     const file = this.files[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) { Toast.show('图片不能超过 8MB'); return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      uploadedImage = e.target.result;
+    Toast.show('正在处理图片...');
+    compressAvatar(file, 256, 0.82).then(function(imageData) {
+      uploadedImage = imageData;
       selected = uploadedImage;
       previewDiv.innerHTML = '<img src="' + uploadedImage + '" alt="上传预览" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:3px solid var(--theme-accent);">';
       // 取消 emoji 选中
       overlay.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
-    };
-    reader.readAsDataURL(file);
+    }).catch(function(err) {
+      Toast.show('头像处理失败: ' + (err && err.message || '未知错误'), 'error');
+    });
   });
 
   document.getElementById('avatarCancelBtn').addEventListener('click', function() { overlay.remove(); });

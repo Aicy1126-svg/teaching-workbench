@@ -95,6 +95,7 @@ function logoutAccount() {
   if (!confirm('确定退出登录？本机数据会保留，云端同步将暂停。')) return;
   Sync.logout();
   updateSyncUI();
+  if (typeof applyPersonalization === 'function') applyPersonalization();
   Toast.show('已退出登录');
 }
 
