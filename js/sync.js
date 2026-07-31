@@ -155,14 +155,49 @@ const Sync = {
   async _pushLocal() {
     const localData = this.collectLocalData();
     let merged = localData;
+    let remoteData = null;
     try {
       const remote = await this._fetchRemote();
-      if (remote) merged = this._mergeData(localData, remote.data);
+      if (remote) {
+        remoteData = remote.data;
+        merged = this._mergeData(localData, remote.data);
+      }
     } catch (e) {}
+
+    // 关键修复：本地与服务器数据一致时不更新时间戳，避免多端互相触发"有新数据"的同步风暴
+    if (remoteData && this._dataEqual(merged, remoteData)) {
+      // 仅把本地 lastSyncAt 对齐到服务器的 updatedAt，不重新 push、不刷时间戳
+      if (remote.updatedAt) {
+        this.lastSyncAt = remote.updatedAt;
+        localStorage.setItem('sync_last_at', String(remote.updatedAt));
+      }
+      return;
+    }
+
     const payload = { username: this.username, data: merged, updatedAt: Date.now() };
     await this._request('/api/push', 'POST', payload);
     this.lastSyncAt = payload.updatedAt;
     localStorage.setItem('sync_last_at', String(payload.updatedAt));
+  },
+
+  _normalize(o) {
+    if (o == null) return o;
+    if (Array.isArray(o)) return o.map(x => this._normalize(x));
+    if (typeof o === 'object') {
+      const keys = Object.keys(o).sort();
+      const out = {};
+      keys.forEach(k => { out[k] = this._normalize(o[k]); });
+      return out;
+    }
+    return o;
+  },
+
+  _dataEqual(a, b) {
+    try {
+      return JSON.stringify(this._normalize(a)) === JSON.stringify(this._normalize(b));
+    } catch (e) {
+      return false;
+    }
   },
 
   _mergeData(local, server) {
@@ -182,12 +217,17 @@ const Sync = {
   async _pullOnly() {
     const result = await this._fetchRemote();
     if (result && result.updatedAt && result.updatedAt > this.lastSyncAt) {
+      const before = this.collectLocalData();
       this.applyRemoteData(result.data);
+      const after = this.collectLocalData();
       this.lastSyncAt = result.updatedAt;
       localStorage.setItem('sync_last_at', String(result.updatedAt));
       this._lastResult = { ok: true, time: Date.now(), error: '', pulled: true };
       this._updateStatus('ok');
-      setTimeout(() => location.reload(), 400);
+      // 仅当实际数据发生变化时才刷新页面，避免无谓的反复加载
+      if (!this._dataEqual(before, after)) {
+        setTimeout(() => location.reload(), 400);
+      }
     }
   },
 
@@ -201,10 +241,13 @@ const Sync = {
     const needForce = (localMissing('schedule') && remoteHas('schedule')) ||
                       (localMissing('students') && remoteHas('students'));
     if (result.updatedAt && (result.updatedAt > this.lastSyncAt || needForce)) {
+      const before = this.collectLocalData();
       this.applyRemoteData(remote);
+      const after = this.collectLocalData();
       this.lastSyncAt = result.updatedAt;
       localStorage.setItem('sync_last_at', String(result.updatedAt));
-      return true;
+      // 仅当实际数据发生变化（或强制补全关键数据）时才认为"拉取成功并需刷新"
+      return !this._dataEqual(before, after) || needForce;
     }
     return false;
   },
