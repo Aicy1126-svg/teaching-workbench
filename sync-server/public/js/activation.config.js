@@ -6,7 +6,12 @@
  */
 (function (root, factory) {
   const SECRET = 'TW-Rzade8HdPvvZY0PPkdmwaaZmo9QdoC39gKS5aMlZV50tJJGN-2026';
-  const cfg = { SECRET: SECRET };
+  // 收款二维码：把你的微信/支付宝收款码图片命名为 payment-qr.png 放到 icons/ 目录，
+  // 或把下面的路径改成你自己的图片地址（相对/绝对均可）。留空则不显示收款码。
+  const PAYMENT_QR = 'icons/payment-qr.png';
+  // 激活页付款提示文案
+  const MERCHANT_TIP = '① 微信 / 支付宝扫码付款  →  ② 输入商家发给你的激活码  →  ③ 立即进入';
+  const cfg = { SECRET: SECRET, PAYMENT_QR: PAYMENT_QR, MERCHANT_TIP: MERCHANT_TIP };
   if (typeof module !== 'undefined' && module.exports) module.exports = cfg;
   if (typeof window !== 'undefined') window.ACTIVATION_CONFIG = cfg;
 })(typeof self !== 'undefined' ? self : this, function () {});

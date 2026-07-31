@@ -142,18 +142,28 @@
   function showScreen(onSuccess) {
     const existing = document.getElementById('activationOverlay');
     if (existing) existing.parentNode.removeChild(existing);
+    const ACT = window.ACTIVATION_CONFIG || {};
+    const PAYMENT_QR = ACT.PAYMENT_QR || '';
+    const MERCHANT_TIP = ACT.MERCHANT_TIP || '输入商家发给你的激活码以继续';
     const ov = document.createElement('div');
     ov.id = 'activationOverlay';
     ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1a1d24,#2a2d38);color:#fff;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
     ov.innerHTML = `
-      <div style="max-width:420px;width:90%;text-align:center;padding:32px;">
-        <div style="font-size:48px;margin-bottom:12px;">🦋</div>
-        <div style="font-size:24px;font-weight:700;margin-bottom:8px;">教学工作台</div>
-        <div style="font-size:14px;color:#cbd5e0;margin-bottom:28px;line-height:1.6;">本软件为付费授权使用。<br>请输入你的激活码以继续。</div>
+      <div style="max-width:440px;width:92%;text-align:center;padding:28px 24px;">
+        <div style="font-size:44px;margin-bottom:8px;">🦋</div>
+        <div style="font-size:24px;font-weight:700;margin-bottom:6px;">教学工作台</div>
+        <div style="font-size:13px;color:#cbd5e0;margin-bottom:20px;line-height:1.6;">本软件为付费授权使用。请先付款，再输入激活码进入。</div>
+        ${PAYMENT_QR ? `
+        <div style="background:#fff;border-radius:16px;padding:14px;display:inline-block;margin-bottom:10px;">
+          <img src="${PAYMENT_QR}" alt="商家收款码" style="width:160px;height:160px;display:block;border-radius:8px;object-fit:contain;"
+               onerror="this.style.display='none';this.parentNode.insertAdjacentHTML('beforeend','<div style=\\'width:160px;height:160px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;text-align:center;\\'>（商家未设置收款码）<br>请联系商家付款</div>');" />
+        </div>
+        <div style="font-size:12px;color:#cbd5e0;margin-bottom:16px;line-height:1.6;">${MERCHANT_TIP}</div>
+        ` : `<div style="font-size:12px;color:#cbd5e0;margin-bottom:16px;">${MERCHANT_TIP}</div>`}
         <input id="actCodeInput" placeholder="XXXX-XXXX-XXXX" style="width:100%;padding:14px 16px;font-size:18px;text-align:center;letter-spacing:2px;border-radius:12px;border:2px solid #4a5568;background:#11151c;color:#fff;outline:none;box-sizing:border-box;text-transform:uppercase;" />
         <div id="actError" style="color:#fc8181;font-size:13px;min-height:20px;margin-top:10px;"></div>
         <button id="actSubmitBtn" style="width:100%;padding:14px;font-size:16px;font-weight:600;border:none;border-radius:12px;background:linear-gradient(135deg,#805AD5,#3182CE);color:#fff;cursor:pointer;margin-top:6px;">激活并进入</button>
-        <div style="font-size:12px;color:#718096;margin-top:18px;line-height:1.6;">激活码由提供方发放，一码一机。<br>遇到问题请联系你的软件提供方。</div>
+        <div style="font-size:12px;color:#718096;margin-top:16px;line-height:1.6;">激活码由提供方发放，一码一机。<br>遇到问题请联系你的软件提供方。</div>
       </div>`;
     document.body.appendChild(ov);
     const input = ov.querySelector('#actCodeInput');
