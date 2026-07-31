@@ -125,8 +125,19 @@ const Sync = {
       try {
         const localRaw = localStorage.getItem(fullKey);
         if (localRaw != null && Sync._isEmptyData(remoteVal) && !Sync._isEmptyData(localRaw)) return;
-      } catch (e) {}
-      try {
+        // 对 personalization 配置对象做字段级合并：
+        // 云端明确包含的字段整体覆盖本地同名字段，本地独有字段（云端没有）保留，
+        // 避免云端缺头像/主题等字段时把本地自定义头像整体覆盖成默认。
+        if (key === 'personalization' && localRaw != null && remoteVal && typeof remoteVal === 'object' && !Array.isArray(remoteVal)) {
+          let localObj = null;
+          try { localObj = JSON.parse(localRaw); } catch (e) { localObj = null; }
+          if (localObj && typeof localObj === 'object' && !Array.isArray(localObj)) {
+            const merged = { ...localObj };
+            Object.keys(remoteVal).forEach(k => { merged[k] = remoteVal[k]; });
+            localStorage.setItem(fullKey, JSON.stringify(merged));
+            return;
+          }
+        }
         localStorage.setItem(fullKey, typeof remoteVal === 'string' ? remoteVal : JSON.stringify(remoteVal));
       } catch (e) { console.warn('同步写入失败:', key, e); }
     });

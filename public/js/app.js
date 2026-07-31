@@ -6775,6 +6775,8 @@ function pickAvatar(avatar) {
   settings.avatar = avatar;
   saveData('personalization', settings);
   applyAvatarToUI(avatar);
+  // 设置头像后立即将个性化数据（含头像）上传云端，避免退出/刷新后端不同步导致重新登录头像丢失
+  if (window.Sync && Sync.isLoggedIn && Sync.isLoggedIn()) Sync.scheduleSync();
   // 同时更新个性化设置页面里的头像选择器
   switchModule('personalize');
   Toast.show('头像已更新');
