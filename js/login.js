@@ -1,10 +1,10 @@
 /**
- * login.js - 极简账号登录 / 注册（Supabase 云端同步）
+ * login.js - 极简账号登录 / 注册（Railway 同源云端同步）
  * 用自己的账号：第一次输入即注册，之后本机自动登录；手机/平板用同一账号即可同步。
  */
 
 function ensureDefaultServerUrl() {
-  // 已改为 Supabase 直连，不再需要 serverUrl
+  // 同源部署，不需要额外 serverUrl
 }
 
 function lastUsername() { return localStorage.getItem('sync_last_username') || ''; }
@@ -17,16 +17,10 @@ function esc(s) {
 
 function showLoginModal() {
   const prefill = esc(Sync.username || lastUsername() || '');
-  const tokenPrefill = localStorage.getItem('github_token') || '';
   const body = `
     <div class="text-sm text-secondary mb-3">
       🔑 输入你<strong>自己的账号和密码</strong>即可：第一次会自动<strong>注册</strong>，之后这台设备自动登录。<br>
       用<strong>同一个账号</strong>在电脑 / 手机 / 平板上登录，排课、学生、便贴等数据会自动同步到云端。
-    </div>
-    <div class="form-group">
-      <label class="form-label">GitHub 私人令牌（首次必填，用于云同步）</label>
-      <input class="input" id="githubToken" value="${esc(tokenPrefill)}" placeholder="ghp_xxxx 开头的令牌">
-      <div class="text-xs text-light mt-1">在 GitHub → Settings → Developer settings → Personal access tokens 生成，需 repo 权限。所有设备填同一个。</div>
     </div>
     <div class="form-group">
       <label class="form-label">账号（用户名）</label>
@@ -38,7 +32,7 @@ function showLoginModal() {
     </div>
     <div id="syncMsg" class="text-sm text-danger" style="min-height:18px"></div>
     <div class="text-xs text-light mt-3" style="border-top:1px solid var(--border);padding-top:8px">
-      ☁️ 数据存储在 Supabase 云端，永不过期、不丢失。
+      ☁️ 数据存储在 Railway 云端数据库，永不过期、不丢失。
     </div>
   `;
   const footer = `
@@ -57,16 +51,7 @@ function showLoginModal() {
 async function doSyncLogin() {
   const username = document.getElementById('syncUsername').value.trim();
   const password = document.getElementById('syncPassword').value;
-  const tokenEl = document.getElementById('githubToken');
-  const token = tokenEl ? tokenEl.value.trim() : '';
   const msgEl = document.getElementById('syncMsg');
-
-  if (!token) {
-    msgEl.textContent = '请先填写 GitHub 私人令牌';
-    return;
-  }
-  localStorage.setItem('github_token', token);
-  Sync.token = token;
 
   if (!username) {
     msgEl.textContent = '请填写账号';
@@ -90,6 +75,7 @@ async function doSyncLogin() {
     Toast.show('✅ 登录成功，正在同步数据...');
     updateSyncUI();
     if (typeof applyPersonalization === 'function') applyPersonalization();
+    if (typeof renderModule === 'function' && App.module) renderModule(App.module);
     const r = await Sync.syncNow();
     if (r.ok && r.pulled) {
       Toast.show('📥 已从云端同步最新数据，即将刷新...');

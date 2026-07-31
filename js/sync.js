@@ -1,16 +1,13 @@
 /**
- * sync.js - 跨设备云同步客户端（GitHub 仓库文件版）
- * 用 GitHub Contents API 读写仓库里的 data/<用户名>.json
+ * sync.js - 跨设备云同步客户端（同源 Railway API 版）
+ * 调用部署平台自带的同步服务器 /api/* 接口
  * 支持账号登录、数据推送/拉取、自动同步
  */
 
-const GITHUB_OWNER = 'Aicy1126-svg';
-const GITHUB_REPO = 'teaching-workbench';
-const GITHUB_API = 'https://api.github.com';
-
 const Sync = {
-  token: localStorage.getItem('github_token') || null,
+  token: localStorage.getItem('sync_token') || null,
   username: localStorage.getItem('sync_username') || null,
+  serverUrl: localStorage.getItem('sync_server_url') || '',
   lastSyncAt: parseInt(localStorage.getItem('sync_last_at') || '0'),
   _debounceTimer: null,
   _syncing: false,
@@ -25,9 +22,11 @@ const Sync = {
     this.token = token;
     this.username = username;
     if (token) {
+      localStorage.setItem('sync_token', token);
       localStorage.setItem('sync_username', username);
       this._startAutoPull();
     } else {
+      localStorage.removeItem('sync_token');
       localStorage.removeItem('sync_username');
       this._stopAutoPull();
       this.lastSyncAt = 0;
@@ -50,45 +49,28 @@ const Sync = {
     }
   },
 
-  async _pullOnly() {
-    try {
-      const result = await this._fetchData();
-      if (result && result.updatedAt && result.updatedAt > this.lastSyncAt) {
-        this.applyRemoteData(result.data);
-        this.lastSyncAt = result.updatedAt;
-        localStorage.setItem('sync_last_at', String(result.updatedAt));
-        this._lastResult = { ok: true, time: Date.now(), error: '', pulled: true };
-        this._updateStatus('ok');
-        setTimeout(() => location.reload(), 400);
-      }
-    } catch (e) {
-      if (this._lastResult.ok) this._lastResult.error = e.message;
-    }
-  },
-
-  async _githubRequest(path, method = 'GET', body = null) {
+  async _request(path, method = 'GET', body = null) {
     const headers = {
-      'Authorization': 'Bearer ' + this.token,
-      'Accept': 'application/vnd.github+json',
       'Content-Type': 'application/json',
-      'X-GitHub-Api-Version': '2022-11-28',
     };
+    if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20000);
     try {
-      const res = await fetch(GITHUB_API + path, {
+      const res = await fetch(path, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
         cache: 'no-store',
-        mode: 'cors',
       });
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error('GitHub 错误 (' + res.status + '): ' + errText.slice(0, 200));
+        let errText = '';
+        try { errText = (await res.json()).error || ''; } catch (e) {}
+        throw new Error((errText || ('HTTP ' + res.status)));
       }
-      return await res.json().catch(() => null);
+      const ct = res.headers.get('content-type') || '';
+      return ct.includes('application/json') ? await res.json() : await res.text();
     } catch (e) {
       if (e.name === 'AbortError') throw new Error('连接超时，请检查网络');
       throw e;
@@ -97,57 +79,20 @@ const Sync = {
     }
   },
 
-  _dataPath() {
-    return '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/data/' + encodeURIComponent(this.username) + '.json';
-  },
-
-  async _fetchData() {
-    try {
-      const res = await this._githubRequest(this._dataPath(), 'GET');
-      if (res && res.content) {
-        const json = JSON.parse(atob(res.content.replace(/\s/g, '')));
-        return { data: json.data || {}, updatedAt: json.updatedAt || 0, sha: res.sha };
-      }
-    } catch (e) {
-      if (e.message && e.message.includes('404')) return null;
-      throw e;
-    }
-    return null;
-  },
-
-  async _saveData(payload) {
-    const existing = await this._fetchData().catch(() => null);
-    const body = {
-      message: 'sync: update ' + this.username + ' data',
-      content: btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2)))),
-      branch: 'main',
-    };
-    if (existing && existing.sha) body.sha = existing.sha;
-    return this._githubRequest(this._dataPath(), 'PUT', body);
-  },
-
   async register(username, password) {
-    const pwdHash = btoa(unescape(encodeURIComponent(username + ':' + password)));
-    const existing = await this._fetchData().catch(() => null);
-    if (existing) throw new Error('用户名已存在');
-    const token = btoa(unescape(encodeURIComponent(username + ':' + Date.now())));
-    await this._saveData({ _pwdHash: pwdHash, accounts: {}, updatedAt: Date.now() });
-    this._saveAuth(token, username);
-    return { token, username };
+    const res = await this._request('/api/register', 'POST', { username, password });
+    this._saveAuth(res.token, username);
+    return res;
   },
 
   async login(username, password) {
-    const pwdHash = btoa(unescape(encodeURIComponent(username + ':' + password)));
-    const row = await this._fetchData();
-    if (!row) throw new Error('用户不存在，请先注册');
-    const storedHash = (row.data && row.data._pwdHash) || '';
-    if (storedHash !== pwdHash) throw new Error('密码错误');
-    const token = btoa(unescape(encodeURIComponent(username + ':' + Date.now())));
-    this._saveAuth(token, username);
-    return { token, username };
+    const res = await this._request('/api/login', 'POST', { username, password });
+    this._saveAuth(res.token, username);
+    return res;
   },
 
   async logout() {
+    try { await this._request('/api/logout', 'POST'); } catch (e) {}
     this._saveAuth(null, null);
     this._lastResult = { ok: false, time: 0, error: '', pulled: false };
     if (typeof updateSyncUI === 'function') updateSyncUI();
@@ -169,13 +114,11 @@ const Sync = {
 
   applyRemoteData(remoteData) {
     if (!remoteData) return;
-    const cleanData = { ...remoteData };
-    delete cleanData._pwdHash;
     const STORAGE_PREFIX = 'teaching_workbench_';
-    const keys = Object.keys(cleanData);
+    const keys = Object.keys(remoteData);
     keys.forEach(key => {
       const fullKey = STORAGE_PREFIX + key;
-      const remoteVal = cleanData[key];
+      const remoteVal = remoteData[key];
       try {
         const localRaw = localStorage.getItem(fullKey);
         if (localRaw != null && Sync._isEmptyData(remoteVal) && !Sync._isEmptyData(localRaw)) return;
@@ -199,8 +142,57 @@ const Sync = {
     return false;
   },
 
+  async _fetchRemote() {
+    try {
+      const res = await this._request('/api/pull?username=' + encodeURIComponent(this.username), 'GET');
+      if (res && res.data) return { data: res.data, updatedAt: res.updatedAt || 0 };
+    } catch (e) {
+      if (this._lastResult.ok) this._lastResult.error = e.message;
+    }
+    return null;
+  },
+
+  async _pushLocal() {
+    const localData = this.collectLocalData();
+    let merged = localData;
+    try {
+      const remote = await this._fetchRemote();
+      if (remote) merged = this._mergeData(localData, remote.data);
+    } catch (e) {}
+    const payload = { username: this.username, data: merged, updatedAt: Date.now() };
+    await this._request('/api/push', 'POST', payload);
+    this.lastSyncAt = payload.updatedAt;
+    localStorage.setItem('sync_last_at', String(payload.updatedAt));
+  },
+
+  _mergeData(local, server) {
+    const out = { ...server };
+    for (const k of Object.keys(local || {})) {
+      const lv = local[k];
+      const sv = server ? server[k] : undefined;
+      if (this._isEmptyData(lv)) {
+        if (!this._isEmptyData(sv)) out[k] = sv;
+      } else {
+        out[k] = lv;
+      }
+    }
+    return out;
+  },
+
+  async _pullOnly() {
+    const result = await this._fetchRemote();
+    if (result && result.updatedAt && result.updatedAt > this.lastSyncAt) {
+      this.applyRemoteData(result.data);
+      this.lastSyncAt = result.updatedAt;
+      localStorage.setItem('sync_last_at', String(result.updatedAt));
+      this._lastResult = { ok: true, time: Date.now(), error: '', pulled: true };
+      this._updateStatus('ok');
+      setTimeout(() => location.reload(), 400);
+    }
+  },
+
   async pull() {
-    const result = await this._fetchData();
+    const result = await this._fetchRemote();
     if (!result) return false;
     const remote = result.data || {};
     const local = this.collectLocalData();
@@ -218,36 +210,11 @@ const Sync = {
   },
 
   async push() {
-    const localData = this.collectLocalData();
-    let merged = localData;
-    try {
-      const remote = await this._fetchData();
-      const remoteData = remote ? (remote.data || {}) : {};
-      merged = this._mergeData(localData, remoteData);
-      if (remoteData._pwdHash) merged._pwdHash = remoteData._pwdHash;
-    } catch (e) {}
-    merged.updatedAt = Date.now();
-    await this._saveData(merged);
-    this.lastSyncAt = merged.updatedAt;
-    localStorage.setItem('sync_last_at', String(merged.updatedAt));
-  },
-
-  _mergeData(local, server) {
-    const out = { ...server };
-    for (const k of Object.keys(local || {})) {
-      const lv = local[k];
-      const sv = server ? server[k] : undefined;
-      if (this._isEmptyData(lv)) {
-        if (!this._isEmptyData(sv)) out[k] = sv;
-      } else {
-        out[k] = lv;
-      }
-    }
-    return out;
+    await this._pushLocal();
   },
 
   async forceRestore() {
-    const result = await this._fetchData();
+    const result = await this._fetchRemote();
     if (result) {
       this.applyRemoteData(result.data);
       this.lastSyncAt = result.updatedAt || Date.now();
@@ -291,7 +258,7 @@ const Sync = {
   getSyncInfo() {
     const fmt = (ts) => ts ? new Date(ts).toLocaleString('zh-CN') : '从未';
     return {
-      serverUrl: 'GitHub 仓库 (云端)',
+      serverUrl: this.serverUrl || '同源部署 (Railway)',
       username: this.username || '(未登录)',
       loggedIn: this.isLoggedIn(),
       lastSyncAt: fmt(this.lastSyncAt),

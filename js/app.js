@@ -5560,8 +5560,8 @@ let matImageDataURL = null;
 function previewMatImage(input) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    Toast.show('图片过大（>2MB），建议压缩后再上传');
+  if (file.size > 8 * 1024 * 1024) {
+    Toast.show('图片过大（>8MB），建议压缩后再上传');
   }
   readFileAsDataURL(file).then(dataURL => {
     matImageDataURL = dataURL;
@@ -6333,7 +6333,7 @@ Modules.personalize = function() {
           </div>
           ${settings.avatar && settings.avatar.startsWith('data:') ? '<button class="btn btn-sm" style="color:var(--color-danger);" onclick="resetCustomAvatar()">移除自定义图片</button>' : ''}
         </div>
-        <div class="text-xs text-secondary mt-1">支持 JPG/PNG，建议 200×200 正方形，不超过 2MB</div>
+        <div class="text-xs text-secondary mt-1">支持 JPG/PNG，建议 200×200 正方形，不超过 8MB</div>
       </div>
     </div>
 
@@ -6497,8 +6497,8 @@ function saveCustomGradient() {
 function uploadBgImage(input) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    Toast.show('图片不能超过 2MB', 'error');
+  if (file.size > 8 * 1024 * 1024) {
+    Toast.show('图片不能超过 8MB', 'error');
     return;
   }
   const reader = new FileReader();
@@ -6728,7 +6728,7 @@ function bindAvatarUpload() {
   newInput.addEventListener('change', function() {
     const file = this.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { Toast.show('图片不能超过 2MB'); return; }
+    if (file.size > 8 * 1024 * 1024) { Toast.show('图片不能超过 8MB'); return; }
     const reader = new FileReader();
     reader.onload = function(e) {
       const imageData = e.target.result;
@@ -6801,7 +6801,7 @@ function showAvatarModal() {
   fileInput.addEventListener('change', function() {
     const file = this.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { Toast.show('图片不能超过 2MB'); return; }
+    if (file.size > 8 * 1024 * 1024) { Toast.show('图片不能超过 8MB'); return; }
     const reader = new FileReader();
     reader.onload = function(e) {
       uploadedImage = e.target.result;
