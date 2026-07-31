@@ -159,8 +159,9 @@ const Sync = {
     const localData = this.collectLocalData();
     let merged = localData;
     let remoteData = null;
+    let remote = null;
     try {
-      const remote = await this._fetchRemote();
+      remote = await this._fetchRemote();
       if (remote) {
         remoteData = remote.data;
         merged = this._mergeData(localData, remote.data);
@@ -170,7 +171,7 @@ const Sync = {
     // 关键修复：本地与服务器数据一致时不更新时间戳，避免多端互相触发"有新数据"的同步风暴
     if (remoteData && this._dataEqual(merged, remoteData)) {
       // 仅把本地 lastSyncAt 对齐到服务器的 updatedAt，不重新 push、不刷时间戳
-      if (remote.updatedAt) {
+      if (remote && remote.updatedAt) {
         this.lastSyncAt = remote.updatedAt;
         localStorage.setItem('sync_last_at', String(remote.updatedAt));
       }
