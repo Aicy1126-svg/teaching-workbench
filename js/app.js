@@ -6592,11 +6592,10 @@ function uploadBgImage(input) {
     Toast.show('图片不能超过 8MB', 'error');
     return;
   }
-  const reader = new FileReader();
-  reader.onload = function(e) {
+  const applyImg = (dataUrl) => {
     const settings = getData('personalization');
     settings.background = settings.background || {};
-    settings.background.image = e.target.result;
+    settings.background.image = dataUrl;
     settings.background.type = 'image';
     settings.background.overlayOpacity = settings.background.overlayOpacity || 0.15;
     saveData('personalization', settings);
@@ -6604,7 +6603,18 @@ function uploadBgImage(input) {
     switchModule('personalize');
     Toast.show('背景图片已上传');
   };
-  reader.readAsDataURL(file);
+  // 压缩后再存，避免原图 base64 过大撑爆同步数据导致手机端同步失败
+  if (typeof compressAvatar === 'function') {
+    compressAvatar(file, 1280, 0.82).then(applyImg).catch(() => {
+      const reader = new FileReader();
+      reader.onload = (e) => applyImg(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  } else {
+    const reader = new FileReader();
+    reader.onload = (e) => applyImg(e.target.result);
+    reader.readAsDataURL(file);
+  }
 }
 
 // 移除背景图片

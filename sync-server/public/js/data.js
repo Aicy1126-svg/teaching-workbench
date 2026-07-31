@@ -409,12 +409,16 @@ function applyPersonalization() {
   if (subtitleEl) subtitleEl.textContent = username + '，欢迎回来';
 
   // 更新背景
+  // 先移除旧的背景图层与遮罩层，避免切换类型时残留
+  const oldBg = document.getElementById('customBgLayer');
+  if (oldBg) oldBg.remove();
+  const oldOv = document.getElementById('customBgOverlay');
+  if (oldOv) oldOv.remove();
   if (settings.background) {
     const bg = settings.background;
     const appEl = document.getElementById('app') || document.body;
-    const oldBg = document.getElementById('customBgLayer');
-    if (oldBg) oldBg.remove();
-
+    // 遮罩底色：深色主题用深底，其余用浅底，保证叠加层下内容可读
+    const overlayRGB = (settings.theme === 'dark') ? '26,29,36' : '245,243,240';
     if (bg.type === 'color') {
       appEl.style.background = bg.color;
       appEl.style.backgroundImage = 'none';
@@ -422,19 +426,21 @@ function applyPersonalization() {
       appEl.style.background = bg.gradient;
       appEl.style.backgroundImage = bg.gradient;
     } else if (bg.type === 'image' && bg.image) {
-      appEl.style.background = bg.color;
+      // 关键修复：不要给容器设实色背景（会盖住后面的背景图），也不要降低背景图本身的 opacity
+      appEl.style.background = 'transparent';
+      appEl.style.backgroundImage = 'none';
       const layer = document.createElement('div');
       layer.id = 'customBgLayer';
-      layer.style.cssText = `
-        position: fixed; inset: 0; z-index: -1;
-        background-image: url(${bg.image});
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        opacity: ${bg.overlayOpacity || 0.0};
-        pointer-events: none;
-      `;
+      layer.style.cssText = 'position:fixed;inset:0;z-index:-2;background-image:url(' + bg.image + ');background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none;';
       document.body.prepend(layer);
+      // 叠加遮罩层：用底色 + overlayOpacity 控制背景图淡入程度（默认 0.15，背景图清晰可见）
+      const overlay = document.createElement('div');
+      overlay.id = 'customBgOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:-1;background:rgba(' + overlayRGB + ',' + (bg.overlayOpacity || 0.15) + ');pointer-events:none;';
+      document.body.prepend(overlay);
+    } else {
+      appEl.style.background = bg.color || '#F5F3F0';
+      appEl.style.backgroundImage = 'none';
     }
   }
 }
