@@ -138,6 +138,21 @@
     try { localStorage.removeItem(KEY_ACT); localStorage.removeItem(KEY_CODE); } catch (e) {}
   }
 
+  // 全屏放大收款码（点击收款码后弹出，方便手机扫码）
+  function openZoom(src) {
+    const z = document.getElementById('qrZoom');
+    if (z) z.parentNode.removeChild(z);
+    const zov = document.createElement('div');
+    zov.id = 'qrZoom';
+    zov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out;font-family:system-ui,-apple-system,sans-serif;';
+    zov.innerHTML = `
+      <div style="color:#fff;font-size:14px;margin-bottom:12px;">长按图片可保存 · 点击任意处关闭</div>
+      <img src="${src}" style="width:min(86vw,86vh);max-width:440px;height:auto;background:#fff;border-radius:12px;padding:12px;box-sizing:border-box;" />
+      <div style="color:#cbd5e0;font-size:12px;margin-top:14px;">用另一台手机扫这个码付款</div>`;
+    zov.addEventListener('click', () => { if (zov.parentNode) zov.parentNode.removeChild(zov); });
+    document.body.appendChild(zov);
+  }
+
   // 全屏激活页
   function showScreen(onSuccess) {
     // 激活页已正常渲染，标记页面就绪，避免启动自检误判为白屏而循环刷新
@@ -157,7 +172,8 @@
         <div style="font-size:13px;color:#cbd5e0;margin-bottom:20px;line-height:1.6;">本软件为付费授权使用。请先付款，再输入激活码进入。</div>
         ${PAYMENT_QR ? `
         <div style="background:#fff;border-radius:16px;padding:14px;display:inline-block;margin-bottom:10px;">
-          <img src="${PAYMENT_QR}" alt="商家收款码" style="width:160px;height:160px;display:block;border-radius:8px;object-fit:contain;"
+          <img id="payQrImg" src="${PAYMENT_QR}" alt="商家收款码" style="width:160px;height:160px;display:block;border-radius:8px;object-fit:contain;cursor:pointer;"
+               title="点击放大"
                onerror="this.style.display='none';this.parentNode.insertAdjacentHTML('beforeend','<div style=\\'width:160px;height:160px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px;text-align:center;\\'>（商家未设置收款码）<br>请联系商家付款</div>');" />
         </div>
         <div style="font-size:12px;color:#cbd5e0;margin-bottom:16px;line-height:1.6;">${MERCHANT_TIP}</div>
@@ -168,6 +184,8 @@
         <div style="font-size:12px;color:#718096;margin-top:16px;line-height:1.6;">激活码由提供方发放，一码一机。<br>遇到问题请联系你的软件提供方。</div>
       </div>`;
     document.body.appendChild(ov);
+    const qrImg = ov.querySelector('#payQrImg');
+    if (qrImg) qrImg.addEventListener('click', () => openZoom(PAYMENT_QR));
     const input = ov.querySelector('#actCodeInput');
     const err = ov.querySelector('#actError');
     const btn = ov.querySelector('#actSubmitBtn');
