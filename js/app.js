@@ -2451,6 +2451,10 @@ function addStudent() {
       <input class="input" id="newStudentTags" placeholder="如：晚辅 重点学生 薄弱">
     </div>
     <div class="form-group">
+      <label class="form-label">学生性格</label>
+      <input class="input" id="newStudentPersonality" placeholder="如：活泼开朗 / 内向沉稳 / 思维活跃">
+    </div>
+    <div class="form-group">
       <label class="form-label">个人色板</label>
       <div class="color-swatch-grid" id="studentColorGrid">${paletteHTML}</div>
       <div class="flex items-center gap-2 mt-2">
@@ -2483,6 +2487,7 @@ function saveNewStudent() {
     parentName: document.getElementById('newStudentParent').value.trim(),
     phone: document.getElementById('newStudentPhone').value.trim(),
     notes: document.getElementById('newStudentNotes').value.trim(),
+    personality: document.getElementById('newStudentPersonality').value.trim(),
     tags: tagsInput ? tagsInput.split(/\s+/).filter(Boolean) : [],
     color: colorVal || null,
     status: 'active',
@@ -2546,6 +2551,10 @@ function editStudent(id) {
       <input class="input" id="editStudentTags" value="${esc((s.tags || []).join(' '))}" placeholder="如：晚辅 重点学生 薄弱">
     </div>
     <div class="form-group">
+      <label class="form-label">学生性格</label>
+      <input class="input" id="editStudentPersonality" value="${esc(s.personality || '')}" placeholder="如：活泼开朗 / 内向沉稳 / 思维活跃">
+    </div>
+    <div class="form-group">
       <label class="form-label">个人色板</label>
       <div class="color-swatch-grid" id="studentColorGrid">${paletteHTML}</div>
       <div class="flex items-center gap-2 mt-2">
@@ -2590,6 +2599,7 @@ function saveEditStudent(id) {
   s.phone = document.getElementById('editStudentPhone').value.trim();
   const tagsInput = document.getElementById('editStudentTags').value.trim();
   s.tags = tagsInput ? tagsInput.split(/\s+/).filter(Boolean) : [];
+  s.personality = document.getElementById('editStudentPersonality').value.trim();
   s.notes = document.getElementById('editStudentNotes').value.trim();
   const colorVal = document.getElementById('editStudentColorValue').value;
   s.color = colorVal || null;
@@ -4075,7 +4085,8 @@ function renderStudentCard(s) {
   const subjectTags = subjects.slice(0, 5).map(sub => `<span class="student-tag subject">${esc(sub)}</span>`).join('');
   // 其他标签分类
   const classTag = s.className ? `<span class="student-tag class">🎓 ${esc(s.className)}</span>` : '';
-  const statusTag = s.status === 'archived' ? `<span class="student-tag weak">已归档</span>` : `<span class="student-tag level">active</span>`;
+  const personalityTag = s.personality ? `<span class="student-tag level" title="学生性格">${esc(s.personality)}</span>` : '';
+  const archiveTag = s.status === 'archived' ? `<span class="student-tag weak">已归档</span>` : '';
   const extraTags = tags.slice(0, 3).map(t => `<span class="student-tag">${esc(t)}</span>`).join('');
 
   return `
@@ -4088,7 +4099,8 @@ function renderStudentCard(s) {
         </div>
       </div>
       <div class="student-tags">
-        ${statusTag}
+        ${personalityTag}
+        ${archiveTag}
         ${classTag}
         ${subjectTags}
         ${extraTags}
