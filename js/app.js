@@ -1321,7 +1321,7 @@ function renderTeacherScheduleView(students, weekSlots, weekStart) {
           const statusDot = { pending:'#6A9B5A', done:'#9AA09A', changed:'#C8A040', leave:'#B07080' }[slot.status] || '#9AA09A';
           mobileHTML += `<td class="sch-compact-td"><div class="sch-compact-cell" style="background:${studentColor};opacity:${opacity}" onclick="editScheduleSlot('${slot.id}')">
             <div class="sch-compact-name">${esc(slot.studentName)} <span class="sch-compact-dot" style="background:${statusDot}"></span></div>
-            <div class="sch-compact-info">${block.time} ${esc(slot.subject || '')}</div>
+            <div class="sch-compact-info">${slot.startTime}-${slot.endTime || ''} ${esc(slot.subject || '')}</div>
           </div></td>`;
         } else {
           mobileHTML += `<td class="sch-compact-td sch-compact-empty" onclick="addScheduleSlot(${day},'${block.start}')">+</td>`;
