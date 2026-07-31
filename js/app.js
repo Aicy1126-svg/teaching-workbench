@@ -1255,20 +1255,32 @@ function renderTeacherScheduleView(students, weekSlots, weekStart) {
   tableHTML += '</tbody></table>';
   tableHTML = `<div class="sch-desktop"><div class="schedule-scroll">${tableHTML}</div></div>`;
 
-  // ===== 手机端：按课程真实时间动态生成时段行（任意时段都能显示）=====
-  const mMin = Math.max(7, minHour);
-  const mMax = Math.min(23, Math.max(maxHour, BASE_END));
+  // ===== 手机端：固定6时段紧凑表（早中晚各两节，课程时间按真实起止显示）=====
+  const BASE_BLOCKS = [
+    { label: '早①', time: '08:00-10:00', start: '08:00', end: '10:00' },
+    { label: '早②', time: '10:00-12:00', start: '10:00', end: '12:00' },
+    { label: '午①', time: '14:00-16:00', start: '14:00', end: '16:00' },
+    { label: '午②', time: '16:00-18:00', start: '16:00', end: '18:00' },
+    { label: '晚①', time: '19:00-21:00', start: '19:00', end: '21:00' },
+  ];
+  // 晚②：有课才显示
+  const hasEvening2 = weekSlots.some(s => (s.startTime || '') >= '21:00');
+  const FIXED_BLOCKS = hasEvening2
+    ? [...BASE_BLOCKS, { label: '晚②', time: '21:00-23:00', start: '21:00', end: '23:00' }]
+    : BASE_BLOCKS;
 
-  // 按 天_起始小时 分组（与桌面版同一套逻辑，支持跨行课程块）
-  const mSlotsByDayStart = {};
-  weekSlots.forEach(s => {
-    const key = `${s.dayOfWeek}_${slotStartH(s)}`;
-    if (!mSlotsByDayStart[key]) mSlotsByDayStart[key] = [];
-    mSlotsByDayStart[key].push(s);
+  // 构建 block → day → slot[] 映射（同一天同一 block 可有多节课）
+  const blockSlots = FIXED_BLOCKS.map(block => {
+    const map = {};
+    weekSlots.forEach(s => {
+      const st = s.startTime || '00:00';
+      if (st >= block.start && st < block.end) {
+        if (!map[s.dayOfWeek]) map[s.dayOfWeek] = [];
+        map[s.dayOfWeek].push(s);
+      }
+    });
+    return map;
   });
-  const mDayBusyUntil = {};
-  const mOccupied = new Set();
-  weekSlots.forEach(s => { for (let h = slotStartH(s); h < slotEndH(s); h++) mOccupied.add(h); });
 
   const isLandscape = !!App.scheduleLandscape;
   let mobileHTML = `<div class="sch-mobile${isLandscape ? ' sch-landscape' : ''}">`;
@@ -1281,43 +1293,47 @@ function renderTeacherScheduleView(students, weekSlots, weekStart) {
   if (weekSlots.length === 0) {
     mobileHTML += '<div class="sch-compact-empty-state">本周暂无排课<br><button class="btn btn-sm btn-primary" style="margin-top:10px" onclick="addScheduleSlot(1,\'\')">+ 添加排课</button></div>';
   } else {
-    // 首列时间标签 + 7 天列
-    mobileHTML += '<table class="sch-compact-table sch-dynamic"><thead><tr><th class="sch-time-col" style="font-size:10px;color:#888;width:38px">时间</th>';
+    // 7 列（无左侧标签列）
+    mobileHTML += '<table class="sch-compact-table sch-fixed-blocks"><thead><tr>';
     weekDays.forEach((d, i) => {
       const dayDate = new Date(monDate); dayDate.setDate(dayDate.getDate() + i);
       mobileHTML += `<th>${d}<br><span class="sch-compact-date">${dayDate.getMonth()+1}/${dayDate.getDate()}</span></th>`;
     });
     mobileHTML += '</tr></thead><tbody>';
 
-    for (let h = mMin; h < mMax; h++) {
-      const rowCls = mOccupied.has(h) ? ' class="sch-block-row"' : ' class="sch-block-row empty-row"';
-      mobileHTML += `<tr${rowCls}><td class="sch-time-col" style="font-size:10px;color:#888;white-space:nowrap;width:38px;padding:4px 2px">${String(h).padStart(2,'0')}:00</td>`;
+    FIXED_BLOCKS.forEach((block, bi) => {
+      // 时段分隔行
+      if (bi === 0) {
+        mobileHTML += '<tr class="sch-period-sep"><td colspan="7"><span class="sch-period-label">上 午</span></td></tr>';
+      } else if (bi === 2) {
+        mobileHTML += '<tr class="sch-period-sep"><td colspan="7"><span class="sch-period-label">下 午</span></td></tr>';
+      } else if (bi === 4) {
+        mobileHTML += '<tr class="sch-period-sep"><td colspan="7"><span class="sch-period-label">晚 上</span></td></tr>';
+      }
+
+      mobileHTML += '<tr class="sch-block-row">';
+      const slots = blockSlots[bi];
       for (let day = 1; day <= 7; day++) {
-        if (mDayBusyUntil[day] && mDayBusyUntil[day] > h) continue; // 被上方跨行块覆盖
-        const key = `${day}_${h}`;
-        const slots = mSlotsByDayStart[key] || [];
-        if (slots.length > 0) {
-          const dur = Math.max(1, ...slots.map(s => slotEndH(s) - slotStartH(s)));
-          mDayBusyUntil[day] = h + dur;
-          mobileHTML += `<td rowspan="${dur}" style="padding:3px;vertical-align:top">`;
-          slots.forEach(slot => {
+        const cellList = slots[day];
+        if (cellList && cellList.length) {
+          let cellHTML = '';
+          cellList.forEach(slot => {
             const studentColor = getStudentColor(slot.studentName);
             const isDone = slot.status === 'done';
             const opacity = isDone ? '0.5' : '1';
             const statusDot = { pending:'#6A9B5A', done:'#9AA09A', changed:'#C8A040', leave:'#B07080' }[slot.status] || '#9AA09A';
-            mobileHTML += `<div class="sch-compact-cell" style="background:${studentColor};opacity:${opacity}" onclick="editScheduleSlot('${slot.id}')">
+            cellHTML += `<div class="sch-compact-cell" style="background:${studentColor};opacity:${opacity}" onclick="editScheduleSlot('${slot.id}')">
               <div class="sch-compact-name">${esc(slot.studentName)} <span class="sch-compact-dot" style="background:${statusDot}"></span></div>
               <div class="sch-compact-info">${slot.startTime}-${slot.endTime || ''} ${esc(slot.subject || '')}</div>
             </div>`;
           });
-          mobileHTML += `</td>`;
+          mobileHTML += `<td class="sch-compact-td">${cellHTML}</td>`;
         } else {
-          const defaultTime = String(h).padStart(2,'0') + ':00';
-          mobileHTML += `<td class="sch-compact-td sch-compact-empty" onclick="addScheduleSlot(${day},'${defaultTime}')">+</td>`;
+          mobileHTML += `<td class="sch-compact-td sch-compact-empty" onclick="addScheduleSlot(${day},'${block.start}')">+</td>`;
         }
       }
       mobileHTML += '</tr>';
-    }
+    });
     mobileHTML += '</tbody></table>';
     mobileHTML += `<div style="text-align:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light)">
       <button class="btn btn-sm btn-primary" onclick="exportScheduleCanvas('teacher', '${weekStart}')">📥 导出图片</button>
