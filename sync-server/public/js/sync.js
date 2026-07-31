@@ -52,33 +52,58 @@ const Sync = {
     }
   },
 
-  async _request(path, method = 'GET', body = null) {
+  async _request(path, method = 'GET', body = null, attempt = 1) {
+    // 离线时直接给出明确提示
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('当前设备离线，请检查网络');
+    }
+
     const headers = {
       'Content-Type': 'application/json',
     };
     if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 45000);
-    try {
-      const res = await fetch(path, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: ctrl.signal,
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        let errText = '';
-        try { errText = (await res.json()).error || ''; } catch (e) {}
-        throw new Error((errText || ('HTTP ' + res.status)));
+
+    const doFetch = async () => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 45000);
+      try {
+        const res = await fetch(path, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal: ctrl.signal,
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          let errText = '';
+          try { errText = (await res.json()).error || ''; } catch (e) {}
+          throw new Error((errText || ('HTTP ' + res.status)));
+        }
+        const ct = res.headers.get('content-type') || '';
+        return ct.includes('application/json') ? await res.json() : await res.text();
+      } catch (e) {
+        if (e.name === 'AbortError') throw new Error('连接超时，请检查网络');
+        throw e;
+      } finally {
+        clearTimeout(timer);
       }
-      const ct = res.headers.get('content-type') || '';
-      return ct.includes('application/json') ? await res.json() : await res.text();
+    };
+
+    try {
+      return await doFetch();
     } catch (e) {
-      if (e.name === 'AbortError') throw new Error('连接超时，请检查网络');
+      // 网络切换等瞬断：自动重试一次
+      const msg = (e.message || '').toLowerCase();
+      const isNetworkError = !e.message || /load failed|failed to fetch|network|offline|fetch|connection/i.test(e.message);
+      if (attempt === 1 && isNetworkError) {
+        await new Promise(r => setTimeout(r, 1200));
+        return this._request(path, method, body, attempt + 1);
+      }
+      // 把浏览器难懂的报错转成中文
+      if (!e.message || /load failed/i.test(e.message)) {
+        throw new Error('网络连接失败，请检查网络后重试');
+      }
       throw e;
-    } finally {
-      clearTimeout(timer);
     }
   },
 
@@ -161,7 +186,7 @@ const Sync = {
       const res = await this._request('/api/pull?username=' + encodeURIComponent(this.username), 'GET');
       if (res && res.data) return { data: res.data, updatedAt: res.updatedAt || 0 };
     } catch (e) {
-      if (this._lastResult.ok) this._lastResult.error = e.message;
+      this._lastResult.error = e.message || '网络连接失败';
     }
     return null;
   },

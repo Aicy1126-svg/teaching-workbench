@@ -47,6 +47,14 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
+  const url = new URL(request.url);
+
+  // API 请求必须直连网络，不能走 Service Worker 缓存（避免返回 stale 数据或离线缓存错误）
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // Network-first for dynamic assets (HTML, JS, CSS) — always get latest version
   const isDynamicAsset = /\.(html|js|css)(\?|$)/.test(request.url) || request.destination === 'document';
 
