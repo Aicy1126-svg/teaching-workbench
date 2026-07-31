@@ -341,6 +341,20 @@ function switchModule(name) {
   updateBodyLandscapeExitButton();
 }
 
+// 原地刷新个性化模块内容并保留滚动位置（背景/头像等子项变更时用，避免整页跳回顶部）
+function rerenderPersonalizeKeepScroll() {
+  const main = document.getElementById('mainContent');
+  const container = document.getElementById('moduleContainer');
+  if (main && container && App.currentModule === 'personalize' && typeof Modules['personalize'] === 'function') {
+    const prevScroll = main.scrollTop;
+    container.innerHTML = Modules['personalize']();
+    if (typeof Modules['personalize'].init === 'function') Modules['personalize'].init();
+    bindModuleEvents('personalize');
+    bindAvatarUpload();
+    main.scrollTop = prevScroll;
+  }
+}
+
 function updateBodyLandscapeExitButton() {
   let btn = document.getElementById('schBodyExitLandscape');
   const need = App.currentModule === 'schedule' && App.scheduleLandscape;
@@ -6600,7 +6614,7 @@ function uploadBgImage(input) {
     settings.background.overlayOpacity = settings.background.overlayOpacity || 0.15;
     saveData('personalization', settings);
     applyPersonalization();
-    switchModule('personalize');
+    rerenderPersonalizeKeepScroll();
     Toast.show('背景图片已上传');
   };
   // 压缩后再存，避免原图 base64 过大撑爆同步数据导致手机端同步失败
@@ -6626,7 +6640,7 @@ function removeBgImage() {
   settings.background.type = 'color';
   saveData('personalization', settings);
   applyPersonalization();
-  switchModule('personalize');
+  rerenderPersonalizeKeepScroll();
 }
 
 // 背景透明度
