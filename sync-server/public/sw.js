@@ -4,7 +4,7 @@
  * - Network-first strategy for data? No data cached here (localStorage stays local)
  * - Cache-first for static assets
  */
-const CACHE_NAME = 'teaching-workbench-v19';
+const CACHE_NAME = 'teaching-workbench-v20';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -60,7 +60,7 @@ self.addEventListener('fetch', event => {
 
   if (isDynamicAsset) {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'reload' })
         .then(response => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
