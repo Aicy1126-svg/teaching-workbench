@@ -4,7 +4,7 @@
  * - Network-first strategy for data? No data cached here (localStorage stays local)
  * - Cache-first for static assets
  */
-const CACHE_NAME = 'teaching-workbench-v22';
+const CACHE_NAME = 'teaching-workbench-v23';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -29,7 +29,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// Activate: claim clients immediately
+// Activate: claim clients immediately, purge old caches, and force a reload so users always land on the latest build
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -38,8 +38,16 @@ self.addEventListener('activate', event => {
           .filter(key => key !== CACHE_NAME)
           .map(key => caches.delete(key))
       )
-    ).then(() => self.clients.claim())
+    )
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ includeUncontrolled: true }))
+      .then(clients => clients.forEach(c => { try { c.postMessage('sw-reload'); } catch (e) {} }))
   );
+});
+
+// Allow the page to force the waiting worker to activate immediately
+self.addEventListener('message', event => {
+  if (event.data === 'skipWaiting') self.skipWaiting();
 });
 
 // Fetch: network-first for HTML/JS/CSS (always get latest), cache fallback for offline

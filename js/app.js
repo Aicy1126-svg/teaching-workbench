@@ -158,11 +158,29 @@ function hideLaunchScreen() {
 }
 
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js')
-      .then(reg => console.log('[PWA] ServiceWorker registered:', reg.scope))
-      .catch(err => console.warn('[PWA] ServiceWorker registration failed:', err));
-  }
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js')
+    .then(reg => {
+      console.log('[PWA] ServiceWorker registered:', reg.scope);
+      // 主动检查更新（拉取最新 sw.js）
+      try { reg.update(); } catch (e) {}
+      // 新版本就绪后：让旧 SW 立即让位并刷新页面，避免一直停留在旧缓存
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+            nw.postMessage('skipWaiting');
+          }
+        });
+      });
+    })
+    .catch(err => console.warn('[PWA] ServiceWorker registration failed:', err));
+  // SW 激活后要求本页刷新（根治顽固旧缓存）
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data === 'sw-reload') location.reload();
+  });
 }
 
 // PWA 安装提示
