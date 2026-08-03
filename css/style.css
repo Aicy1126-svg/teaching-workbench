@@ -1,6 +1,6 @@
 /* ========== 主题配色变量 ========== */
 :root {
-  /* 主题颜色��由 JS 动态设置） */
+  /* 主题颜色（由 JS 动态设置） */
   --theme-bg-gradient: linear-gradient(160deg, #E8F0F8 0%, #D6E4F2 50%, #C4D8EC 100%);
   --theme-bg-main: #E8F0F8;
   --theme-accent: #3182CE;

@@ -6054,7 +6054,7 @@ Modules.personalize = function() {
   // 所有模块列表（带默认图标和名称）
   const modules = [
     { key: 'dashboard', name: '首页总览', icon: '🏠' },
-    { key: 'todo', name: '每日任��', icon: '✅' },
+    { key: 'todo', name: '每日任务', icon: '✅' },
     { key: 'calendar', name: '日历看板', icon: '📅' },
     { key: 'countdown', name: '考试倒计时', icon: '⏰' },
     { key: 'schedule', name: '排课管理', icon: '📋' },

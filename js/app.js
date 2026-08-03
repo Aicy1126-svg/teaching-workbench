@@ -639,12 +639,16 @@ Modules.dashboard = function() {
   const schedule = DB.get('schedule', { list: [] }).list;
   const weekRange = DB.getWeekRange();
   const weekClasses = schedule.filter(s => {
-    const d = new Date(s.date || new Date());
+    const ds = getSlotActualDate(s);
+    if (!ds) return false;
+    const d = new Date(ds + 'T00:00:00');
     return d >= weekRange.start && d <= weekRange.end && s.status === 'pending';
   });
   const monthRange = DB.getMonthRange();
   const monthDone = schedule.filter(s => {
-    const d = new Date(s.date || new Date());
+    const ds = getSlotActualDate(s);
+    if (!ds) return false;
+    const d = new Date(ds + 'T00:00:00');
     return d >= monthRange.start && d <= monthRange.end && s.status === 'done';
   });
   const studyTime = DB.get('studyTime', { records: [] }).records;
@@ -6054,7 +6058,7 @@ Modules.personalize = function() {
   // 所有模块列表（带默认图标和名称）
   const modules = [
     { key: 'dashboard', name: '首页总览', icon: '🏠' },
-    { key: 'todo', name: '每日任��', icon: '✅' },
+    { key: 'todo', name: '每日任务', icon: '✅' },
     { key: 'calendar', name: '日历看板', icon: '📅' },
     { key: 'countdown', name: '考试倒计时', icon: '⏰' },
     { key: 'schedule', name: '排课管理', icon: '📋' },
