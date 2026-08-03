@@ -2646,20 +2646,12 @@ function cleanupOrphanSchedule() {
 }
 
 // ---------- 结课设置 + 预测 ----------
-// 仅在「科目时段」已设置时计算每周课时（不再关联课消台账，结课时间完全自由设置）
+// 每周课时由用户直接手填（不再依赖已移除的科目时段），剩余课时也手填，二者齐全即预测结课周
 function computeGraduationForecast(student) {
-  const weeklyHours = (student.subjects || []).reduce((sum, sub) => {
-    normalizeSubject(sub);
-    const sessSum = (sub.sessions || []).reduce((ss, se) => {
-      const list = Array.isArray(se.days) ? se.days : [];
-      const daysPerWeek = list.length || 0;
-      const h = calcSlotHours({ startTime: se.startTime, endTime: se.endTime });
-      return ss + h * daysPerWeek;
-    }, 0);
-    return sum + sessSum;
-  }, 0);
-  const remaining = student.graduation && student.graduation.remainingHours ? Number(student.graduation.remainingHours) : null;
-  if (!weeklyHours || remaining == null || remaining <= 0) return null;
+  const g = student.graduation || {};
+  const weeklyHours = g.weeklyHours != null && g.weeklyHours !== '' ? Number(g.weeklyHours) : 0;
+  const remaining = g.remainingHours != null && g.remainingHours !== '' ? Number(g.remainingHours) : 0;
+  if (!weeklyHours || !remaining || remaining <= 0) return null;
   const weeks = Math.ceil(remaining / weeklyHours);
   const predicted = new Date();
   predicted.setDate(predicted.getDate() + weeks * 7);
@@ -2670,16 +2662,16 @@ function editGraduation(studentId) {
   const data = DB.get('students', { list: [] });
   const s = data.list.find(x => x.id === studentId);
   if (!s) return;
-  if (!s.graduation) s.graduation = { enabled: false, targetDate: '', startDate: '', remainingHours: '' };
+  if (!s.graduation) s.graduation = { enabled: false, targetDate: '', startDate: '', weeklyHours: '', remainingHours: '' };
   const g = s.graduation;
   const forecast = computeGraduationForecast(s);
   const forecastHTML = forecast
     ? `<div class="lesson-doc text-sm" style="margin-top:8px">
-        每周上课约：${formatDecimalHours(forecast.weeklyHours)} 课时<br>
-        剩余课时：${forecast.remaining} 课时<br>
+        每周上课：${forecast.weeklyHours} 节<br>
+        剩余课时：${forecast.remaining} 节<br>
         预计还需约 <strong>${forecast.weeks}</strong> 周 → 预测结课 <strong>${forecast.predicted}</strong>
       </div>`
-    : `<div class="text-xs text-light mt-2">在下方「预估剩余课时」填入数字，即可自动估算预测结课时间（不取自课消台账，您可自行设定）。</div>`;
+    : `<div class="text-xs text-light mt-2">在下方填写「每周课时」和「预估剩余课时」两项，即可自动估算预测结课时间（均为手动填写，不取自课消台账）。</div>`;
   const body = `
     <div class="form-group">
       <label class="form-label">是否有结课时间</label>
@@ -2699,7 +2691,12 @@ function editGraduation(studentId) {
       <div class="text-xs text-light mt-1">设定从某天起开始加课（如考前冲刺），仅作备注/提醒，不影响已排课。</div>
     </div>
     <div class="form-group">
-      <label class="form-label">预估剩余课时（可选，用于预测结课）</label>
+      <label class="form-label">每周课时（节/周）</label>
+      <input type="number" class="input" id="gradWeekly" min="0" step="1" value="${esc(g.weeklyHours || '')}" placeholder="如：3">
+      <div class="text-xs text-light mt-1">当前每周实际上的课节数，用于预测结课周。</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">预估剩余课时（节）</label>
       <input type="number" class="input" id="gradRemain" min="0" step="1" value="${esc(g.remainingHours || '')}" placeholder="如：40">
     </div>
     ${forecastHTML}`;
@@ -2715,6 +2712,7 @@ function saveGraduation(studentId) {
   s.graduation.enabled = document.getElementById('gradEnabled').checked;
   s.graduation.targetDate = document.getElementById('gradDate').value || '';
   s.graduation.startDate = document.getElementById('gradStart').value || '';
+  s.graduation.weeklyHours = document.getElementById('gradWeekly').value || '';
   s.graduation.remainingHours = document.getElementById('gradRemain').value || '';
   DB.set('students', data);
   Modal.close(document.querySelector('.modal-overlay'));
@@ -4873,10 +4871,8 @@ function aiGenerateReportField(studentId, field, month) {
       const fc = d.student.graduation && d.student.graduation.remainingHours ? Number(d.student.graduation.remainingHours) : null;
       if (fc != null && fc > 0) {
         const subs = d.subjects.length > 0 ? d.subjects : ['当前科目'];
-        const weeklyH = (d.student.subjects || []).reduce((sum, sub) => {
-          const sessions = sub.sessions || [];
-          return sum + sessions.reduce((s, ss) => { const days = (ss.days||[]).length || 1; return s + days * calcSlotHours({ startTime: ss.startTime, endTime: ss.endTime }); }, 0);
-        }, 0) || 2;
+        const gradObj = d.student.graduation || {};
+        const weeklyH = gradObj.weeklyHours ? Number(gradObj.weeklyHours) : 2;
         const weeks = Math.ceil(fc / weeklyH);
         content += `\n剩余课时约${fc}课时，按当前每周约${formatDecimalHours(weeklyH)}课时计算，预计还可上课约${weeks}周。`;
       }
