@@ -3599,7 +3599,9 @@ function exportLedgerText(month) {
 // ---------- 6. 备课文档库 ----------
 Modules.lessonPrep = function() {
   const data = DB.get('lessonPrep', { list: [] });
-  const sorted = data.list.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+  const sorted = (data.list || []).slice().sort((a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0));
+  // 分类筛选：按科目聚合
+  const subjects = [...new Set(sorted.map(l => (l.subject || '').trim()).filter(Boolean))];
 
   return `
     <div class="module-header">
@@ -3612,8 +3614,16 @@ Modules.lessonPrep = function() {
       </div>
     </div>
 
-    ${sorted.length > 0 ? `<div class="item-grid">` + sorted.map(l => `
-      <div class="item-card" onclick="viewLesson('${l.id}')">
+    ${subjects.length > 0 ? `<div class="card mb-3" id="lessonPrepFilter">
+      <div class="flex gap-2 flex-wrap items-center">
+        <span class="text-sm text-secondary">分类筛选：</span>
+        <span class="tag active" onclick="filterLessons('')">全部</span>
+        ${subjects.map(s => `<span class="tag" onclick="filterLessons('${esc(s)}')">${esc(s)}</span>`).join('')}
+      </div>
+    </div>` : ''}
+
+    ${sorted.length > 0 ? `<div class="item-grid" id="lessonGrid">` + sorted.map(l => `
+      <div class="item-card" data-subject="${esc(l.subject || '')}" onclick="viewLesson('${l.id}')">
         <div class="item-card-title">${esc(l.studentName)} · ${esc(l.subject || '未指定科目')}</div>
         <div class="item-card-desc">📅 ${esc(l.date || l.createdAt || '未设置日期')}</div>
         <div class="flex gap-2 flex-wrap mt-2">
@@ -3625,6 +3635,17 @@ Modules.lessonPrep = function() {
     `).join('') + `</div>` : '<div class="empty-state"><div class="empty-state-icon">📝</div><div class="empty-state-text">暂无备课文档，点击上方新建</div></div>'}
   `;
 };
+
+function filterLessons(subject) {
+  const bar = document.getElementById('lessonPrepFilter');
+  if (bar) bar.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
+  if (event && event.target) event.target.classList.add('active');
+  document.querySelectorAll('#lessonGrid .item-card').forEach(card => {
+    const sub = card.dataset.subject || '';
+    if (!subject || sub === subject) card.style.display = '';
+    else card.style.display = 'none';
+  });
+}
 Modules.lessonPrep.bindEvents = function() {};
 Modules.lessonPrep.init = function() {};
 
