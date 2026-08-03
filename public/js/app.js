@@ -96,6 +96,42 @@ function readFileAsDataURL(file) {
   });
 }
 
+// 容错读取文本文件：先按 UTF-8 解码，若含替换字符（非 UTF-8）则回退 GBK/GB18030，
+// 兼容 Excel 导出的旧文件，避免导入中文变成乱码
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      let u8 = new Uint8Array(e.target.result);
+      let start = 0;
+      if (u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF) start = 3; // 去 UTF-8 BOM
+      const slice = u8.subarray(start);
+      const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(slice);
+      if (!utf8.includes('�')) { resolve(utf8); return; }
+      try { resolve(new TextDecoder('gb18030').decode(slice)); }
+      catch (err) { resolve(utf8); }
+    };
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// 把「UTF-8 字节被当成单字节编码(Latin-1)读」产生的乱码还原为中文；无法还原返回 null
+function reverseMojibake(str) {
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch (e) { return null; }
+}
+// 检测单个字符串是否乱码：返回 null / {type:'mojibake',fixed} / {type:'unrecoverable'}
+function detectGarbled(str) {
+  if (!str || typeof str !== 'string') return null;
+  if (str.includes('�')) return { type: 'unrecoverable' };
+  const fixed = reverseMojibake(str);
+  if (fixed && fixed !== str && /[一-鿿]/.test(fixed)) return { type: 'mojibake', fixed };
+  return null;
+}
+
 // ==================== PWA / 启动画面 ====================
 function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches ||
@@ -564,7 +600,7 @@ function startPomodoroForTask(taskId, mode) {
 // ==================== 导入导出 ====================
 function exportData() {
   const data = DB.exportAll();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const blob = new Blob(['﻿' + JSON.stringify(data, null, 2)], { type: 'application/json; charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -577,10 +613,9 @@ function exportData() {
 function importData(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
+  readFileText(file).then(text => {
     try {
-      const data = JSON.parse(ev.target.result);
+      const data = JSON.parse(text);
       if (DB.importAll(data)) {
         Toast.show('数据导入成功，正在刷新...');
         setTimeout(() => location.reload(), 1000);
@@ -590,8 +625,7 @@ function importData(e) {
     } catch (err) {
       Toast.show('导入失败：' + err.message);
     }
-  };
-  reader.readAsText(file);
+  }).catch(err => Toast.show('读取文件失败：' + err.message));
   e.target.value = '';
 }
 
@@ -6160,6 +6194,7 @@ Modules.personalize = function() {
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-primary" onclick="exportAllData()">📤 导出全部数据</button>
         <button class="btn btn-secondary" onclick="document.getElementById('importBackupInput').click()">📥 导入备份</button>
+        <button class="btn btn-secondary" onclick="scanAndRepairGarbled()">🔧 扫描/修复乱码</button>
         <input type="file" id="importBackupInput" accept="application/json,.json" style="display:none;" onchange="importAllData(this)">
       </div>
       <div class="text-xs text-secondary mt-2" id="backupHint"></div>
@@ -6200,7 +6235,7 @@ function exportAllData() {
       exportedAt: new Date().toISOString(),
       data
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const blob = new Blob(['﻿' + JSON.stringify(payload, null, 2)], { type: 'application/json; charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const ts = new Date().toISOString().slice(0, 10);
@@ -6222,10 +6257,9 @@ function exportAllData() {
 function importAllData(input) {
   const file = input.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
+  readFileText(file).then(text => {
     try {
-      const payload = JSON.parse(e.target.result);
+      const payload = JSON.parse(text);
       if (!payload || !payload.data) throw new Error('备份文件格式不正确');
       let count = 0;
       for (const key of Object.keys(payload.data)) {
@@ -6242,8 +6276,87 @@ function importAllData(input) {
     } finally {
       input.value = '';
     }
-  };
-  reader.readAsText(file);
+  }).catch(err => {
+    Toast.show('读取文件失败：' + err.message, 'error');
+    input.value = '';
+  });
+}
+
+// 扫描并修复被单字节编码误读的中文乱码（如学生姓名/学校），同时列出不可还原的条目
+function scanAndRepairGarbled() {
+  const SCAN = [
+    { key: 'students', label: '学生', fields: ['name', 'school', 'grade', 'className', 'parentName', 'notes'], tagsField: 'tags' },
+    { key: 'schedule', label: '排课', fields: ['studentName', 'subject'] },
+    { key: 'grades', label: '成绩', fields: ['studentName', 'examName', 'subject'] },
+    { key: 'todo', label: '待办', fields: ['title'] },
+    { key: 'lessonPrep', label: '备课', fields: ['title', 'subject', 'studentName'] },
+  ];
+  const issues = [];
+  SCAN.forEach(scan => {
+    const store = DB.get(scan.key, { list: [] });
+    (store.list || []).forEach(it => {
+      scan.fields.forEach(f => {
+        const r = detectGarbled(it[f]);
+        if (r) issues.push({ store: scan.key, label: scan.label, id: it.id, field: f, original: it[f], result: r });
+      });
+      if (scan.tagsField && Array.isArray(it[scan.tagsField])) {
+        it[scan.tagsField].forEach((t, i) => {
+          const r = detectGarbled(t);
+          if (r) issues.push({ store: scan.key, label: scan.label, id: it.id, field: scan.tagsField + '[' + i + ']', original: t, result: r });
+        });
+      }
+    });
+  });
+  if (issues.length === 0) {
+    Modal.show('乱码体检', '<div class="text-sm">✅ 未发现可自动修复的乱码。若个别文字仍显示异常，多为录入时输入法问题，请直接编辑对应条目重新输入。</div>',
+      '<button class="btn btn-primary" onclick="Modal.close(document.querySelector(\'.modal-overlay\'))">知道了</button>');
+    return;
+  }
+  const moji = issues.filter(i => i.result.type === 'mojibake');
+  const unrecover = issues.filter(i => i.result.type === 'unrecoverable');
+  let html = '<div class="text-sm">共发现 <b>' + issues.length + '</b> 处疑似乱码。</div>';
+  if (moji.length) {
+    html += '<div class="text-xs text-light mt-1">以下可自动还原（UTF-8 被误读为单字节编码），确认后一键修复：</div>';
+    moji.forEach(i => {
+      html += '<div class="lesson-doc text-sm" style="margin-top:6px">'
+        + '【' + esc(i.label) + '】字段 ' + esc(i.field) + '<br>'
+        + '<span class="text-light">原：' + esc(i.original) + '</span><br>'
+        + '<span style="color:#2a7"><b>修复为：' + esc(i.result.fixed) + '</b></span></div>';
+    });
+  }
+  if (unrecover.length) {
+    html += '<div class="text-xs text-light mt-2">以下为不可还原乱码（字节已缺失），需手动重新录入：</div>';
+    unrecover.forEach(i => {
+      html += '<div class="lesson-doc text-sm" style="margin-top:6px">【' + esc(i.label) + '】字段 ' + esc(i.field) + '：' + esc(i.original.slice(0, 20)) + '</div>';
+    });
+  }
+  const footer = moji.length
+    ? '<button class="btn btn-secondary" onclick="Modal.close(document.querySelector(\'.modal-overlay\'))">取消</button>'
+      + '<button class="btn btn-primary" onclick="applyGarbledFix()">应用修复 ' + moji.length + ' 处</button>'
+    : '<button class="btn btn-primary" onclick="Modal.close(document.querySelector(\'.modal-overlay\'))">知道了</button>';
+  window.__garbledFixList = moji.map(i => ({ store: i.store, id: i.id, field: i.field, fixed: i.result.fixed }));
+  Modal.show('乱码体检结果', html, footer);
+}
+
+function applyGarbledFix() {
+  const list = window.__garbledFixList || [];
+  if (!list.length) { Modal.close(document.querySelector('.modal-overlay')); return; }
+  const grouped = {};
+  list.forEach(i => { (grouped[i.store] = grouped[i.store] || []).push(i); });
+  Object.keys(grouped).forEach(storeKey => {
+    const store = DB.get(storeKey, { list: [] });
+    grouped[storeKey].forEach(fix => {
+      const it = (store.list || []).find(x => x.id === fix.id);
+      if (!it) return;
+      const m = fix.field.match(/^(.*)\[(\d+)\]$/);
+      if (m && Array.isArray(it[m[1]])) it[m[1]][parseInt(m[2], 10)] = fix.fixed;
+      else it[fix.field] = fix.fixed;
+    });
+    DB.set(storeKey, store);
+  });
+  Modal.close(document.querySelector('.modal-overlay'));
+  Toast.show('已修复 ' + list.length + ' 处乱码，正在刷新…');
+  setTimeout(() => location.reload(), 600);
 }
 
 // 图标预览实时更新
