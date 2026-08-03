@@ -1496,8 +1496,10 @@ function renderStudentScheduleView(students, weekSlots, weekStart) {
   const selId = App.selectedStudent || students[0].id;
   const selected = students.find(s => s.id === selId) || students[0];
 
-  // 该生本周排课
-  const studentSlots = weekSlots.filter(s => s.studentName === selected.name);
+  // 该生本周排课（优先按 studentId 匹配，防止姓名乱码后看不到课）
+  const studentSlots = weekSlots.filter(s =>
+    (s.studentId && s.studentId === selected.id) || s.studentName === selected.name
+  );
   studentSlots.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
 
   // 周导览
@@ -1562,7 +1564,9 @@ function renderStudentScheduleView(students, weekSlots, weekStart) {
         </div>
         ${(() => {
           const weekDays2 = ['周一','周二','周三','周四','周五','周六','周日'];
-          const stSlots = weekSlots.filter(s => s.studentName === selected.name);
+          const stSlots = weekSlots.filter(s =>
+            (s.studentId && s.studentId === selected.id) || s.studentName === selected.name
+          );
           // 学生视图专属加课（独立存储，不影响教师视图/结算）
           const extraAll = DB.get('studentExtra', { list: [] }).list;
           const stExtras = extraAll.filter(e => e.studentId === selected.id && e.weekStart === weekStart);
@@ -1747,7 +1751,9 @@ function renderScheduleToCanvas(canvas, weekStart, studentId) {
   if (isParent) {
     const stu = students.find(s => s.id === studentId);
     if (stu) {
-      displaySlots = weekSlots.filter(s => s.studentName === stu.name);
+      displaySlots = weekSlots.filter(s =>
+        (s.studentId && s.studentId === stu.id) || s.studentName === stu.name
+      );
       title = `${stu.name}同学 一周课程安排`;
       // 合并学生视图专属加课（虚线块显示，不影响教师视图数据）
       const extras = DB.get('studentExtra', { list: [] }).list
@@ -2960,7 +2966,12 @@ Modules.billing = function() {
   const reimburseVal = bs.reimbursement || 0;
 
   const doneClasses = schedule.list.filter(s => {
-    if (s.studentName !== studentName) return false;
+    // 优先按 studentId 匹配，避免学生姓名乱码导致结算缺失
+    if (s.studentId && selectedStudent) {
+      if (s.studentId !== selectedStudent) return false;
+    } else if (s.studentName !== studentName) {
+      return false;
+    }
     if (s.status !== 'done') return false;
     return isSlotInPeriod(s, periodRange);
   }).sort((a, b) => getSlotActualDate(a).localeCompare(getSlotActualDate(b)));
@@ -3268,7 +3279,12 @@ function exportBillingImage(studentId, bsKey) {
   const periodLabel = getBillingPeriodLabel(parsed.type, parsed.period, App.billingCustomStart, App.billingCustomEnd);
 
   const doneClasses = schedule.list.filter(s => {
-    if (s.studentName !== student.name) return false;
+    // 优先按 studentId 匹配，避免学生姓名乱码导致结算缺失
+    if (s.studentId && student.id) {
+      if (s.studentId !== student.id) return false;
+    } else if (s.studentName !== student.name) {
+      return false;
+    }
     if (s.status !== 'done') return false;
     return isSlotInPeriod(s, periodRange);
   }).sort((a, b) => getSlotActualDate(a).localeCompare(getSlotActualDate(b)));
@@ -6305,19 +6321,29 @@ function importAllData(input) {
 
 // 扫描并修复被单字节编码误读的中文乱码（如学生姓名/学校），同时列出不可还原的条目
 function scanAndRepairGarbled() {
+  const allStudents = DB.get('students', { list: [] }).list;
+  const studentById = {};
+  allStudents.forEach(s => { if (s.id) studentById[s.id] = s; });
   const SCAN = [
     { key: 'students', label: '学生', fields: ['name', 'school', 'grade', 'className', 'parentName', 'notes'], tagsField: 'tags' },
-    { key: 'schedule', label: '排课', fields: ['studentName', 'subject'] },
-    { key: 'grades', label: '成绩', fields: ['studentName', 'examName', 'subject'] },
+    { key: 'schedule', label: '排课', fields: ['studentName', 'subject'], studentIdField: 'studentId', studentNameField: 'studentName' },
+    { key: 'grades', label: '成绩', fields: ['studentName', 'examName', 'subject'], studentIdField: 'studentId', studentNameField: 'studentName' },
     { key: 'todo', label: '待办', fields: ['title'] },
-    { key: 'lessonPrep', label: '备课', fields: ['title', 'subject', 'studentName'] },
+    { key: 'lessonPrep', label: '备课', fields: ['title', 'subject', 'studentName'], studentIdField: 'studentId', studentNameField: 'studentName' },
   ];
   const issues = [];
   SCAN.forEach(scan => {
     const store = DB.get(scan.key, { list: [] });
     (store.list || []).forEach(it => {
       scan.fields.forEach(f => {
-        const r = detectGarbled(it[f]);
+        let r = detectGarbled(it[f]);
+        // 若姓名字段已出现替换字符且不可恢复，但记录关联了学生ID，可尝试按ID回填正确姓名
+        if (r && r.type === 'unrecoverable' && scan.studentNameField === f && scan.studentIdField && it[scan.studentIdField]) {
+          const stu = studentById[it[scan.studentIdField]];
+          if (stu && stu.name && !detectGarbled(stu.name)) {
+            r = { type: 'byStudentId', fixed: stu.name };
+          }
+        }
         if (r) issues.push({ store: scan.key, label: scan.label, id: it.id, field: f, original: it[f], result: r });
       });
       if (scan.tagsField && Array.isArray(it[scan.tagsField])) {
@@ -6333,14 +6359,15 @@ function scanAndRepairGarbled() {
       '<button class="btn btn-primary" onclick="Modal.close(document.querySelector(\'.modal-overlay\'))">知道了</button>');
     return;
   }
-  const moji = issues.filter(i => i.result.type === 'mojibake');
+  const moji = issues.filter(i => i.result.type === 'mojibake' || i.result.type === 'byStudentId');
   const unrecover = issues.filter(i => i.result.type === 'unrecoverable');
   let html = '<div class="text-sm">共发现 <b>' + issues.length + '</b> 处疑似乱码。</div>';
   if (moji.length) {
-    html += '<div class="text-xs text-light mt-1">以下可自动还原（UTF-8 被误读为单字节编码），确认后一键修复：</div>';
+    html += '<div class="text-xs text-light mt-1">以下可自动还原，确认后一键修复：</div>';
     moji.forEach(i => {
+      const reason = i.result.type === 'byStudentId' ? '（按学生ID回填正确姓名）' : '（UTF-8 被误读为单字节编码）';
       html += '<div class="lesson-doc text-sm" style="margin-top:6px">'
-        + '【' + esc(i.label) + '】字段 ' + esc(i.field) + '<br>'
+        + '【' + esc(i.label) + '】字段 ' + esc(i.field) + ' ' + reason + '<br>'
         + '<span class="text-light">原：' + esc(i.original) + '</span><br>'
         + '<span style="color:#2a7"><b>修复为：' + esc(i.result.fixed) + '</b></span></div>';
     });
