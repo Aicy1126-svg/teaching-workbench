@@ -639,12 +639,16 @@ Modules.dashboard = function() {
   const schedule = DB.get('schedule', { list: [] }).list;
   const weekRange = DB.getWeekRange();
   const weekClasses = schedule.filter(s => {
-    const d = new Date(s.date || new Date());
+    const ds = getSlotActualDate(s);
+    if (!ds) return false;
+    const d = new Date(ds + 'T00:00:00');
     return d >= weekRange.start && d <= weekRange.end && s.status === 'pending';
   });
   const monthRange = DB.getMonthRange();
   const monthDone = schedule.filter(s => {
-    const d = new Date(s.date || new Date());
+    const ds = getSlotActualDate(s);
+    if (!ds) return false;
+    const d = new Date(ds + 'T00:00:00');
     return d >= monthRange.start && d <= monthRange.end && s.status === 'done';
   });
   const studyTime = DB.get('studyTime', { records: [] }).records;
