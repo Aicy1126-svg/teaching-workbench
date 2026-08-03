@@ -2099,30 +2099,12 @@ function addScheduleSlot(day, time) {
     ? students.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')
     : '<option value="">请先在左侧"学生名单"中添加学生</option>';
 
-  // 固定时段预设（来自所有学生的科目时段，每个星期生成一条）
-  const WD = ['周一','周二','周三','周四','周五','周六','周日'];
-  let presetOpts = '<option value="">（手动输入）</option>';
-  students.forEach(st => (st.subjects || []).forEach(sub => {
-    normalizeSubject(sub);
-    (sub.sessions || []).forEach(se => {
-      const days = Array.isArray(se.days) ? se.days : [1];
-      days.forEach(d => {
-        presetOpts += `<option value="${esc(st.name)}|${esc(sub.subject)}|${d}|${esc(se.startTime)}|${esc(se.endTime)}">${esc(st.name)} · ${esc(sub.subject)} · ${WD[(d||1)-1]} ${esc(se.startTime)}-${esc(se.endTime)}</option>`;
-      });
-    });
-  }));
-  const hasPreset = students.some(st => (st.subjects || []).length > 0);
-
   // 根据time推断结束时间（默认2小时），若无time则取当前整点
   const defaultStart = time || (String(new Date().getHours()).padStart(2,'0') + ':00');
   const endTime = parseInt(defaultStart.split(':')[0]) + 2;
   const defaultEnd = String(endTime).padStart(2,'0') + ':00';
 
   const body = `
-    ${hasPreset ? `<div class="form-group">
-      <label class="form-label">从固定时段带入</label>
-      <select class="select" id="schPreset" onchange="applyStudentPreset(this.value)">${presetOpts}</select>
-    </div>` : ''}
     <div class="form-group">
       <label class="form-label">学生姓名</label>
       <select class="select" id="schStudent">${studentOptions}</select>
@@ -2165,21 +2147,6 @@ function addScheduleSlot(day, time) {
   `;
   const footer = `<button class="btn btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'))">取消</button><button class="btn btn-primary" onclick="saveScheduleSlot()">保存</button>`;
   Modal.show('添加排课', body, footer);
-}
-
-function applyStudentPreset(val) {
-  if (!val) return;
-  const [name, subject, day, start, end] = val.split('|');
-  const sEl = document.getElementById('schStudent');
-  if (sEl) sEl.value = name;
-  const subEl = document.getElementById('schSubject');
-  if (subEl) subEl.value = subject;
-  const dayEl = document.getElementById('schDay');
-  if (dayEl) dayEl.value = day;
-  const stEl = document.getElementById('schStart');
-  if (stEl) stEl.value = start;
-  const enEl = document.getElementById('schEnd');
-  if (enEl) enEl.value = end;
 }
 
 function saveScheduleSlot() {
@@ -2531,7 +2498,6 @@ function editStudent(id) {
   const data = DB.get('students', { list: [] });
   const s = data.list.find(x => x.id === id);
   if (!s) return;
-  const subjectsLen = (s.subjects || []).length;
   const paletteHTML = STUDENT_COLOR_PALETTE.map((c, i) => {
     const active = (s.color === c) ? 'active' : '';
     return `<span class="color-swatch student-swatch ${active}" style="background:${c}" data-color="${c}" onclick="selectStudentColorEdit(this,'${c}')" title="色板${i+1}"></span>`;
@@ -2587,12 +2553,11 @@ function editStudent(id) {
       <input class="input" id="editStudentNotes" value="${esc(s.notes || '')}">
     </div>
     <div class="form-group">
-      <label class="form-label">各科目固定上课时间</label>
+      <label class="form-label">结课设置</label>
       <div class="flex gap-2 flex-wrap">
-        <button class="btn btn-sm btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'));manageStudentSubjects('${id}')">📚 管理科目时段（${subjectsLen}）</button>
         <button class="btn btn-sm btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'));editGraduation('${id}')">🎓 结课设置</button>
       </div>
-      <div class="text-xs text-light mt-1">设置后，排课可一键带入固定时间；结课设置用于预测结课周。</div>
+      <div class="text-xs text-light mt-1">设置结课目标，预测结课周。</div>
     </div>
   `;
   const footer = `<button class="btn btn-danger" onclick="deleteStudent('${id}')">删除</button><button class="btn btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'))">取消</button><button class="btn btn-primary" onclick="saveEditStudent('${id}')">保存</button>`;
@@ -2660,250 +2625,6 @@ function normalizeSubject(sub) {
   const days = Array.isArray(sub.days) ? sub.days : [sub.dayOfWeek || 1];
   sub.sessions = [{ days, startTime: sub.startTime || '19:00', endTime: sub.endTime || '21:00' }];
   return sub;
-}
-
-// 生成一个"时段"编辑块（星期勾选 + 起止时间），供同一科目下多次添加
-function subjectSessionBlock(days, startTime, endTime) {
-  const WD = ['周一','周二','周三','周四','周五','周六','周日'];
-  const dArr = Array.isArray(days) && days.length ? days : [1];
-  const checks = [1,2,3,4,5,6,7].map(d => `<label class="day-check ${dArr.includes(d) ? 'checked' : ''}"><input type="checkbox" ${dArr.includes(d) ? 'checked' : ''} onchange="syncSessionDays(this)"><span class="day-box"></span><span>${WD[d-1]}</span></label>`).join('');
-  return `<div class="subject-session">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <div class="text-xs text-light">上课时段</div>
-      <button class="btn btn-xs btn-danger" type="button" onclick="removeSubjectSession(this)">🗑 删除</button>
-    </div>
-    <div class="day-check-group">${checks}</div>
-    <input type="hidden" class="ss-days" value="${dArr.join(',')}">
-    <div class="grid-2 mt-2">
-      <div class="form-group"><label class="form-label">开始</label><input type="time" class="input ss-start" value="${esc(startTime || '19:00')}"></div>
-      <div class="form-group"><label class="form-label">结束</label><input type="time" class="input ss-end" value="${esc(endTime || '21:00')}"></div>
-    </div>
-  </div>`;
-}
-
-function addSubjectSession() {
-  const c = document.getElementById('ssSessions');
-  if (c) c.insertAdjacentHTML('beforeend', subjectSessionBlock([1], '19:00', '21:00'));
-}
-
-function removeSubjectSession(btn) {
-  const block = btn.closest('.subject-session');
-  const c = document.getElementById('ssSessions');
-  if (block && c && c.querySelectorAll('.subject-session').length > 1) {
-    block.remove();
-  } else {
-    Toast.show('至少保留一个时段');
-  }
-}
-
-// 勾选框切换：把选中的星期写入该时段块的隐藏域
-function syncSessionDays(cb) {
-  const block = cb.closest('.subject-session');
-  if (!block) return;
-  const cbs = block.querySelectorAll('input[type=checkbox]');
-  const vals = [1,2,3,4,5,6,7].filter((_, i) => cbs[i] && cbs[i].checked);
-  const hid = block.querySelector('.ss-days');
-  if (hid) hid.value = vals.join(',');
-  const lbl = cb.closest('.day-check');
-  if (lbl) { if (cb.checked) lbl.classList.add('checked'); else lbl.classList.remove('checked'); }
-}
-
-function manageStudentSubjects(studentId) {
-  const data = DB.get('students', { list: [] });
-  const s = data.list.find(x => x.id === studentId);
-  if (!s) return;
-  if (!s.subjects) s.subjects = [];
-  const WD = ['周一','周二','周三','周四','周五','周六','周日'];
-  const studentName = s.name;
-  let listHTML = '';
-  if (s.subjects.length === 0) {
-    listHTML = `<div class="empty-state"><div class="empty-state-text">还没有固定时段，点下面「添加科目时段」</div></div>`;
-  } else {
-    listHTML = s.subjects.map(sub => {
-      normalizeSubject(sub);
-      const range = (sub.startDate && sub.endDate) ? `${sub.startDate} ~ ${sub.endDate}` : (sub.startDate ? `${sub.startDate} 起` : '长期');
-      const sessHTML = (sub.sessions || []).map(se => {
-        const daysTxt = (se.days || []).map(d => WD[(d||1)-1]).join('、');
-        return `<div class="text-sm text-secondary">· ${daysTxt} ${esc(se.startTime||'')}-${esc(se.endTime||'')}</div>`;
-      }).join('') || '<div class="text-sm text-secondary">· 未设时段</div>';
-      return `<div class="subject-card" style="border:1px solid var(--border-color);border-radius:var(--radius);padding:12px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-weight:500">${esc(sub.subject || '-')}</div>
-          <div>
-            <button class="btn btn-xs btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'));editStudentSubject('${studentId}','${sub.id}')">✏️ 编辑</button>
-            <button class="btn btn-xs btn-danger" onclick="deleteStudentSubject('${studentId}','${sub.id}')">🗑 删除</button>
-          </div>
-        </div>
-        <div class="mt-2">${sessHTML}</div>
-        <div class="text-sm text-secondary">周期：${range}</div>
-      </div>`;
-    }).join('');
-  }
-  const body = `
-    <div>${listHTML}</div>
-    <button class="btn btn-sm btn-primary mt-2" onclick="Modal.close(document.querySelector('.modal-overlay'));editStudentSubject('${studentId}')">➕ 添加科目时段</button>
-    <div class="text-xs text-light mt-2">同一科目可设多个时段（如周一晚 + 周六上午）；保存后按起止日期自动生成排课。</div>`;
-  const footer = `<button class="btn btn-secondary" onclick="editStudent('${studentId}')">返回</button>`;
-  Modal.show('科目固定时段 · ' + studentName, body, footer);
-}
-
-function editStudentSubject(studentId, subjectId) {
-  const data = DB.get('students', { list: [] });
-  const s = data.list.find(x => x.id === studentId);
-  if (!s) return;
-  if (!s.subjects) s.subjects = [];
-  const sub = subjectId ? s.subjects.find(x => x.id === subjectId) : null;
-  if (sub) normalizeSubject(sub);
-  const subVal = sub ? sub.subject : '';
-  const sdVal = sub ? sub.startDate || '' : DB.formatDate(new Date(), 'YYYY-MM-DD');
-  const edVal = sub ? sub.endDate || '' : '';
-  const sessions = (sub && sub.sessions && sub.sessions.length) ? sub.sessions : [{ days:[1], startTime:'19:00', endTime:'21:00' }];
-  const sessHTML = sessions.map(se => subjectSessionBlock(se.days, se.startTime, se.endTime)).join('');
-  const body = `
-    <div class="form-group"><label class="form-label">科目</label><input class="input" id="ssSubject" value="${esc(subVal)}" placeholder="如：数学"></div>
-    <div class="grid-2">
-      <div class="form-group"><label class="form-label">起始日期</label><input type="date" class="input" id="ssStartD" value="${esc(sdVal)}"></div>
-      <div class="form-group"><label class="form-label">结束日期</label><input type="date" class="input" id="ssEndD" value="${esc(edVal)}" placeholder="留空=长期"></div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">上课时段（可添加多个，不同星期/时间）</label>
-      <div id="ssSessions">${sessHTML}</div>
-      <button class="btn btn-sm btn-secondary mt-2" type="button" onclick="addSubjectSession()">➕ 添加时段</button>
-    </div>
-    <div class="text-xs text-light">同一科目可设多个时段（如周一晚 + 周六上午）；保存后按起止日期自动生成排课。</div>`;
-  const footer = `<button class="btn btn-secondary" onclick="Modal.close(document.querySelector('.modal-overlay'))">取消</button><button class="btn btn-primary" onclick="saveStudentSubject('${studentId}','${subjectId || ''}')">保存</button>`;
-  Modal.show(sub ? '编辑科目时段' : '添加科目时段', body, footer);
-}
-
-function saveStudentSubject(studentId, subjectId) {
-  const data = DB.get('students', { list: [] });
-  const s = data.list.find(x => x.id === studentId);
-  if (!s) return;
-  if (!s.subjects) s.subjects = [];
-  const subject = document.getElementById('ssSubject').value.trim();
-  const startDate = document.getElementById('ssStartD').value || '';
-  const endDate = document.getElementById('ssEndD').value || '';
-  // 读取所有时段块
-  const blocks = document.querySelectorAll('#ssSessions .subject-session');
-  const sessions = [];
-  blocks.forEach(b => {
-    const daysRaw = (b.querySelector('.ss-days') || {}).value || '';
-    const days = daysRaw ? daysRaw.split(',').map(d => parseInt(d)).filter(Boolean).sort((a,b)=>a-b) : [];
-    const startTime = (b.querySelector('.ss-start') || {}).value || '';
-    const endTime = (b.querySelector('.ss-end') || {}).value || '';
-    if (days.length > 0 && startTime) sessions.push({ days, startTime, endTime });
-  });
-  if (!subject) { Toast.show('请输入科目'); return; }
-  if (sessions.length === 0) { Toast.show('请至少设置一个时段（星期 + 时间）'); return; }
-  if (!startDate) { Toast.show('请填写起始日期'); return; }
-  if (endDate && endDate < startDate) { Toast.show('结束日期不能早于起始日期'); return; }
-
-  let targetId = subjectId;
-  if (subjectId) {
-    const sub = s.subjects.find(x => x.id === subjectId);
-    if (sub) Object.assign(sub, { subject, startDate, endDate, sessions });
-  } else {
-    const ns = { id: DB.uid(), subject, startDate, endDate, sessions };
-    s.subjects.push(ns);
-    targetId = ns.id;
-  }
-  DB.set('students', data);
-  Modal.close(document.querySelector('.modal-overlay'));
-  // 根据起止日期 + 各时段的星期，自动把固定课生成到排课表
-  generateSubjectSchedule(studentId, targetId);
-  Toast.show('已保存，并已生成排课表');
-  manageStudentSubjects(studentId);
-}
-
-// 把某学生的某个固定科目，按起止日期范围 + 各时段的星期生成排课 slot（不重复）
-// 已过日期（早于今天）默认标记为"已上完"(done)，未来日期为"待上课"(pending)
-// 同时清理"已不再匹配当前 sessions 配置"的旧排课（仅清 pending，保护已上完的历史）
-function generateSubjectSchedule(studentId, subjectId) {
-  const data = DB.get('students', { list: [] });
-  const s = data.list.find(x => x.id === studentId);
-  if (!s || !s.subjects) return;
-  const sub = subjectId ? s.subjects.find(x => x.id === subjectId) : null;
-  if (!sub) return;
-  normalizeSubject(sub);
-  const schedule = DB.get('schedule', { list: [], lastAutoWeek: '' });
-  const WD = [7,1,2,3,4,5,6]; // getDay(): 0=周日 → 7
-  const start = sub.startDate ? new Date(sub.startDate) : new Date();
-  const end = sub.endDate ? new Date(sub.endDate) : new Date(sub.startDate);
-  const today = new Date(); today.setHours(0,0,0,0);
-
-  // ===== 1) 同步清理：删除"已不再匹配"的旧排课（不论是否已上课） =====
-  // 不匹配的判定：①sessionIndex 超出当前 sessions 范围 ②时段内容变了 ③超出当前起止日期
-  let removed = 0;
-  schedule.list = schedule.list.filter(sl => {
-    if (sl.generatedFrom !== sub.id) return true; // 不是本科目的不动
-    const si = sl.sessionIndex;
-    if (si == null || si >= (sub.sessions || []).length) { removed++; return false; } // 时段被删
-    const sess = sub.sessions[si];
-    if (!sess) { removed++; return false; }
-    // 时段内容变了（开始时间不同）即视为旧排课
-    if ((sl.startTime || '') !== (sess.startTime || '') || (sl.endTime || '') !== (sess.endTime || '')) {
-      removed++; return false;
-    }
-    // 超出当前起止日期
-    if (sl.date) {
-      const d = new Date(sl.date);
-      if (d < start || d > end) { removed++; return false; }
-    }
-    return true;
-  });
-
-  // ===== 2) 按当前 sessions 生成新排课（按 sessionIndex 去重） =====
-  let count = 0;
-  (sub.sessions || []).forEach((sess, si) => {
-    const daysSet = new Set(sess.days || []);
-    const cur = new Date(start);
-    while (cur <= end) {
-      const wd = WD[cur.getDay()];
-      if (daysSet.has(wd)) {
-        const dateStr = DB.formatDate(cur, 'YYYY-MM-DD');
-        const exists = schedule.list.some(sl =>
-          sl.studentName === s.name && sl.date === dateStr &&
-          (sl.subject || '') === (sub.subject || '') && (sl.startTime || '') === (sess.startTime || '') &&
-          sl.generatedFrom === sub.id && sl.sessionIndex === si);
-        if (!exists) {
-          const isPast = new Date(dateStr) < today;
-          const weekStart = getWeekMonday(cur);
-          schedule.list.push({
-            id: DB.uid(), studentId: s.id, studentName: s.name,
-            dayOfWeek: wd, startTime: sess.startTime, endTime: sess.endTime,
-            subject: sub.subject, status: isPast ? 'done' : 'pending',
-            date: dateStr, notes: '', weekStart,
-            generatedFrom: sub.id, sessionIndex: si
-          });
-          count++;
-        }
-      }
-      cur.setDate(cur.getDate() + 1);
-    }
-  });
-  // ===== 3) 已过日期但仍是"待上课"的该科目排课，补正为"已上完" =====
-  schedule.list.forEach(sl => {
-    if (sl.generatedFrom === sub.id && sl.status === 'pending' && sl.date && new Date(sl.date) < today) {
-      sl.status = 'done';
-    }
-  });
-  DB.set('schedule', schedule);
-  if (count > 0) console.log(`已为 ${s.name}·${sub.subject} 生成 ${count} 节排课`);
-  if (removed > 0) console.log(`已清理 ${removed} 节失效排课（时段变更/删除/超出周期）`);
-}
-
-function deleteStudentSubject(studentId, subjectId) {
-  const data = DB.get('students', { list: [] });
-  const s = data.list.find(x => x.id === studentId);
-  if (!s || !s.subjects) return;
-  s.subjects = s.subjects.filter(x => x.id !== subjectId);
-  DB.set('students', data);
-  // 同时删除由该固定时段自动生成的排课（仅标记了 generatedFrom 的）
-  const schedule = DB.get('schedule', { list: [], lastAutoWeek: '' });
-  schedule.list = schedule.list.filter(sl => sl.generatedFrom !== subjectId);
-  DB.set('schedule', schedule);
-  Toast.show('已删除，并移除已生成的排课');
-  manageStudentSubjects(studentId);
 }
 
 // 一键清理排课表中"学生名单里已不存在"的孤儿排课（含已上课记录）
@@ -3629,7 +3350,8 @@ function exportBillingImage(studentId, bsKey) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `课时对账单_${student.name}_${month}.png`;
+    const safeLabel = (periodLabel || '').replace(/[\\/:*?"<>|]/g, '_');
+    a.download = `课时对账单_${student.name}_${safeLabel}.png`;
     a.click();
     URL.revokeObjectURL(url);
     Toast.show('对账单图片已下载');
@@ -3861,7 +3583,7 @@ Modules.lessonPrep = function() {
     ${sorted.length > 0 ? `<div class="item-grid">` + sorted.map(l => `
       <div class="item-card" onclick="viewLesson('${l.id}')">
         <div class="item-card-title">${esc(l.studentName)} · ${esc(l.subject || '未指定科目')}</div>
-        <div class="item-card-desc">${esc(l.date || '未设置日期')}</div>
+        <div class="item-card-desc">📅 ${esc(l.date || l.createdAt || '未设置日期')}</div>
         <div class="flex gap-2 flex-wrap mt-2">
           <span class="tag tag-sage">教师版 ${l.teacherVersion ? '✓' : '空'}</span>
           <span class="tag tag-tan">学生版 ${l.studentVersion ? '✓' : '空'}</span>

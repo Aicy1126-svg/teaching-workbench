@@ -690,8 +690,9 @@ ul, ol { list-style: none; }
   right: 0;
   bottom: 0;
   width: var(--ai-panel-width);
-  background: var(--bg-card);
+  background: #ffffff;
   border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.10);
   display: none;
   flex-direction: column;
   z-index: 80;
@@ -768,6 +769,12 @@ ul, ol { list-style: none; }
   background: var(--bg-input);
   color: var(--text-main);
   border-bottom-left-radius: 4px;
+}
+.ai-panel .chat-msg.ai {
+  background: #EEF2F7;
+}
+.ai-panel .chat-msg.user {
+  background: var(--color-primary);
 }
 
 .ai-input-area {

@@ -270,24 +270,20 @@ ul, ol { list-style: none; }
 .avatar-modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.3);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.6);
   z-index: 500;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .avatar-modal {
-  background: var(--theme-glass-bg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: #ffffff;
   border-radius: var(--radius-xl);
-  border: 0.5px solid var(--theme-glass-border);
+  border: 1px solid var(--border-color);
   padding: 24px;
-  width: 320px;
-  max-width: 90vw;
-  box-shadow: var(--shadow-xl);
+  width: 340px;
+  max-width: 92vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
 }
 .avatar-modal-title {
   font-size: 16px; font-weight: 600;
@@ -694,8 +690,9 @@ ul, ol { list-style: none; }
   right: 0;
   bottom: 0;
   width: var(--ai-panel-width);
-  background: var(--bg-card);
+  background: #ffffff;
   border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.10);
   display: none;
   flex-direction: column;
   z-index: 80;
@@ -772,6 +769,12 @@ ul, ol { list-style: none; }
   background: var(--bg-input);
   color: var(--text-main);
   border-bottom-left-radius: 4px;
+}
+.ai-panel .chat-msg.ai {
+  background: #EEF2F7;
+}
+.ai-panel .chat-msg.user {
+  background: var(--color-primary);
 }
 
 .ai-input-area {
@@ -1599,7 +1602,8 @@ canvas { max-width: 100%; }
 .grid-2 > *, .grid-3 > *, .grid-4 > *, .grid-auto > * { min-width: 0; }
 
 @media (max-width: 768px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
 }
 
 /* ========== 备课文档 ========== */
